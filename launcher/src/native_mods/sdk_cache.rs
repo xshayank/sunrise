@@ -27,7 +27,25 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use sunrise_launcher_release_verify::{PublicKey, SIGNATURE, SIGNATURE_V2, SUMS};
 use sunrise_launcher_sdk::{self as sdk, Asset, Index, Kind, Side, INDEX};
-use sunrise_native_build::prebuilt::Package;
+
+/// The SDK's three compiled slices of one build, each in its own folder (`runtime`, `api`, `engine`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Package {
+    pub runtime: PathBuf,
+    pub api: PathBuf,
+    pub engine: PathBuf,
+}
+
+impl Package {
+    /// The slices under the build folder `build`.
+    pub fn at(build: &Path) -> Self {
+        Self {
+            runtime: build.join("runtime"),
+            api: build.join("api"),
+            engine: build.join("engine"),
+        }
+    }
+}
 
 /// Replaces the base SDK releases are read from: a URL, or a folder holding `sdk-<build id>/`
 /// folders (and game releases' folders, for their build ids).

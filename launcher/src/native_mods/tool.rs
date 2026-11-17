@@ -1,5 +1,5 @@
 //! The SDK's native build tool, `cargo sunrise-mod native-build`, run as a process with the launcher's toolchain (docs/modding/src/reference/sdk/08-native-build.md).
-use crate::i18n::trf;
+use crate::i18n::{tr, trf};
 use crate::rust_toolchain::Toolchain;
 use serde::Deserialize;
 use serde_json::Value;
@@ -40,10 +40,31 @@ pub(super) struct Plan<'a> {
 }
 
 /// The registry crates a build would add, which the player says yes or no to.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Consent {
     pub added_crates: usize,
     pub build_scripts: Vec<String>,
     pub proc_macros: Vec<String>,
+}
+
+impl Consent {
+    pub fn label(&self) -> String {
+        trf(
+            "Native mod adds {count} registry crates",
+            &[("count", &self.added_crates.to_string())],
+        )
+    }
+
+    pub fn detail(&self) -> String {
+        let none = tr("None");
+        let scripts = self.build_scripts.join(", ");
+        let macros = self.proc_macros.join(", ");
+        [
+            tr("Registry dependencies are native code. Their build scripts and proc macros run during compilation, before the game starts.").to_owned(),
+            trf("Build scripts: {crates}", &[("crates", if self.build_scripts.is_empty() { none } else { &scripts })]),
+            trf("Proc macros: {crates}", &[("crates", if self.proc_macros.is_empty() { none } else { &macros })]),
+        ].join("\n\n")
+    }
 }
 
 /// The mod a failed build stops at, and how.

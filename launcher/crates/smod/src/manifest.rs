@@ -278,7 +278,7 @@ pub struct Module {
     pub visibility: Option<String>,
 }
 
-/// Which installations must carry a package: the game's `mod_vocab::Side`, in the same serde form.
+/// Which installations must carry a package: the game's mod-vocab `Side`, in the same serde form.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
@@ -292,7 +292,7 @@ pub enum Side {
     Server,
 }
 
-/// A dependency's dispatch ordering: the game's `mod_vocab::DependencyOrder`, in the same serde form.
+/// A dependency's dispatch ordering: the game's mod-vocab `DependencyOrder`, in the same serde form.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]

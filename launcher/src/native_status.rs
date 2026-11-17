@@ -62,7 +62,7 @@ pub fn state(enabled: &[Mod], built: Option<&[Mod]>) -> State {
 /// mod tool packs beside the source but the build's own digest of the copied source never holds
 /// (else every mod packed with a uses table read Needs rebuild after each build).
 fn archive_digest<'a>(files: impl Iterator<Item = (&'a str, &'a [u8])>) -> String {
-    use sunrise_mod_package::mod_surface::uses::USES_FILE;
+    use sunrise_launcher_smod::manifest::USES_FILE;
     native_mods::digest(files.filter(|(name, _)| *name != USES_FILE))
 }
 

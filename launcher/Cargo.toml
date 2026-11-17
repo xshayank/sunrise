@@ -11,8 +11,6 @@ members = ["crates/addresses", "crates/bench", "crates/friends", "crates/smod", 
 default-members = [".", "crates/addresses", "crates/bench", "crates/friends", "crates/smod", "crates/mcp", "crates/nbt", "crates/release-verify", "crates/resolver", "crates/sdk", "crates/shader-api", "crates/system", "crates/telemetry", "crates/theme"]
 
 [dependencies]
-# Native mods compile against the signed SDK (`native_mods.rs`); `cargo sunrise-mod native-build` runs the same code.
-sunrise-native-build = { path = "../crates/sunrise-native-build" }
 # GPUI Fast (longbridge/gpui-fast): Zed's GPUI with retained views and cached scroll layers, under
 # its own name. wgpu renders on Linux, not blade (#3812).
 gpui = { package = "gpui-fast", version = "0.1.13" }
@@ -60,10 +58,8 @@ sunrise-launcher-telemetry = { path = "crates/telemetry" }
 sunrise-launcher-theme = { path = "crates/theme" }
 # The sunset scene, painted skies, rain and frosted glass (`scenery/`).
 sunrise-launcher-scenery = { path = "scenery" }
-# The engine, through the platform's public API (docs/layers.md): the pinned version, the preparer and the native build.
-sunrise-platform = { path = "../crates/sunrise-platform", features = ["prepare", "mod-build"] }
-# The native build's SDK, mixins and fit test, and the content fence a mod's files pass before install.
-sunrise-mod-package = { path = "../crates/sunrise-mod-package", features = ["index", "prebuilt", "runtime-process"] }
+# The engine, through the platform's public API (docs/layers.md): the pinned version and the preparer.
+sunrise-platform = { path = "../crates/sunrise-platform", features = ["prepare"] }
 # Parses proxy and download addresses (`net.rs`); already in the lockfile through ureq.
 url = "2"
 # Deleting a world moves it to the system's trash
@@ -117,8 +113,6 @@ winresource = "0.1"
 
 [dev-dependencies]
 sunrise-launcher-release-verify = { path = "crates/release-verify", features = ["signing"] }
-# The compiled mods a native build's runtime check expects, in its end-to-end test.
-sunrise-mod-vocab = { path = "../crates/sunrise-mod-vocab" }
 libc = "0.2"
 # Tokenize source strings for the translation completeness test, including multiline calls.
 syn = "2"

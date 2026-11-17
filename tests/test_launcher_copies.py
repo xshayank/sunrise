@@ -84,6 +84,24 @@ MIRRORED = (
      "052665a32cf9980ffcd1d1cb51f72a918e6613d89fb2097562afb306ca4f4fe2", "launcher/src/browser/java.rs jar_title"),
     ("crates/sunrise-port-pack/src/jar.rs", "manifest_value",
      "8eba4a800351645479e1f2fc79c727bf2e3aee7bdcc97b27a3fa249791a2b33e", "launcher/src/browser/java.rs jar_title"),
+    ("crates/sunrise-native-build/src/lib.rs", "bundles",
+     "ce3f41468a62dd8889427d1a5ad7493a0d6d491bc5a5a1e7d69a52a833b2dd30", "launcher/src/native_mods/bundle.rs bundles"),
+    ("crates/sunrise-native-build/src/lib.rs", "scan_bundles",
+     "0186b6a99c78d6c3296063bc8d4c31134c035e787d25a146d7dc1839f20ae974",
+     "launcher/src/native_mods/bundle.rs scan_bundles"),
+    ("crates/sunrise-native-build/src/lib.rs", "log_warning",
+     "6e43ac4162a8696cf5dfb6acdb206f1b3446186c49fa9105c168f4a5418bf7ae",
+     "launcher/src/native_mods/build_log.rs log_warning"),
+    ("crates/sunrise-native-build/src/lib.rs", "failure",
+     "ce65c921695767d21d8c3047d36b48b58d843a78ac4b56d2f77117c68a016430", "launcher/src/native_mods/build_log.rs failure"),
+    ("crates/sunrise-native-build/src/lib.rs", "unpack_archive",
+     "08b67ddd8289e49ed1ce5c81ff77ee25bfca94a9d6cbf0b85df68a28e203eb0c", "launcher/src/github_mods.rs unpack_archive"),
+    ("crates/sunrise-native-build/src/package.rs", "read",
+     "8c016ff10236333a2e9fd2de5eabda8f26d4353088a290d5e5250d4dbb17148a",
+     "launcher/src/native_mods/bundle/package.rs read"),
+    ("crates/sunrise-native-build/src/package.rs", "copy_files",
+     "ea02d6cc0ec18a4fe33804e4ee67bd2fe49e6e6d410b30fd56872f9e0c2e317a",
+     "launcher/src/native_mods/bundle/package.rs copy_files"),
 )
 
 
@@ -127,6 +145,19 @@ SAME_FUNCTIONS = (
         "route", "to_json", "build_of", "schema", "read", "asset", "route_assets", "verify", "unpack", "lock",
         "no_locks", "rename_retrying", "busy", "extract", "untar", "entry_target",
     )),
+    ("crates/sunrise-native-build/src/lib.rs", "launcher/src/native_mods/bundle.rs", (
+        "bundle_in", "is_revision", "bundle_files", "digest", "source_digest", "copy_bundle",
+    )),
+    ("crates/sunrise-native-build/src/lib.rs", "launcher/src/native_mods/build_log.rs", (
+        "log_path", "clear_log", "append_log", "check_cancelled", "cancel", "clear_cancel", "mod_id_from_file",
+        "diagnostic",
+    )),
+    ("crates/sunrise-native-build/src/prebuilt.rs", "launcher/src/native_mods/build_log.rs", ("compiling",)),
+    ("crates/sunrise-native-build/src/prebuilt.rs", "launcher/src/native_mods/sdk_cache.rs", ("at",)),
+    ("crates/sunrise-native-build/src/lib.rs", "launcher/src/github_mods.rs", ("unpack_source",)),
+    ("crates/sunrise-native-build/src/rust.rs", "launcher/src/rust_toolchain.rs", ("scrubbed", "low_priority")),
+    ("crates/sunrise-mod-surface/src/uses.rs", "launcher/src/native_mods/uses.rs", ("item",)),
+    ("crates/sunrise-mod-surface/src/lib.rs", "launcher/src/native_mods/uses.rs", ("leaf",)),
 )
 
 # (the game's file, the launcher's copy, its edits, the types, impls and constants copied whole, by their head).
@@ -142,6 +173,31 @@ SAME_ITEMS = (
         "pub const LOCK_SUFFIX", "pub const PARTIAL_SUFFIX", "const PAX_KEYS", "struct Partial", "impl Partial",
         "impl Drop for Partial",
     )),
+    ("crates/sunrise-native-build/src/lib.rs", "launcher/src/native_mods/bundle.rs", (
+        ("sunrise_mod_package::", "sunrise_launcher_smod::"),
+        ("""pub fn needs_mixins(&self) -> bool {
+        !self.native().mixin.is_empty()
+            || !self.native().module.is_empty()
+            || !self.native().bridge.is_empty()
+            || !self.native().state.is_empty()
+    }""", ""),
+    ), ("pub enum Target", "impl Target", "pub const NATIVE_MANIFEST", "pub struct Bundle", "impl Bundle")),
+    ("crates/sunrise-native-build/src/lib.rs", "launcher/src/native_mods/build_log.rs", (), (
+        "pub const CANCELLED", "static CANCEL",
+    )),
+    ("crates/sunrise-native-build/src/prebuilt.rs", "launcher/src/native_mods/build_log.rs", (), (
+        "pub enum Refusal", "impl std::fmt::Display for Refusal", "impl Refusal",
+    )),
+    ("crates/sunrise-native-build/src/package.rs", "launcher/src/native_mods/bundle/package.rs", (
+        ("sunrise_mod_package::", "sunrise_launcher_smod::"), ("crate::host::trf", "trf"),
+    ), ("fn checked_files", "pub fn files", "pub fn copy", "pub fn checked_bundles")),
+    ("crates/sunrise-native-build/src/registry_inventory.rs", "launcher/src/native_mods/tool.rs", (
+        ("crate::host::", ""),
+    ), ("pub fn label", "pub fn detail")),
+    ("crates/sunrise-native-build/src/rust.rs", "launcher/src/rust_toolchain.rs", (), (
+        "pub const WINDOWS_X64_TARGET", "pub const SCRUBBED", "const IOPRIO_WHO_PROCESS", "const LOW_IO",
+    )),
+    ("crates/sunrise-mod-surface/src/uses.rs", "launcher/src/native_mods/uses.rs", (), ("pub enum ItemKind",)),
 )
 
 
@@ -266,6 +322,8 @@ class LauncherCopies(unittest.TestCase):
                          constant("crates/sunrise-mod-surface/src/uses.rs", "USES_FILE"))
         self.assertEqual(constant("launcher/crates/smod/src/manifest.rs", "MAX_USES"),
                          constant("crates/sunrise-mod-surface/src/uses.rs", "MAX_USES_BYTES"))
+        self.assertEqual(constant("launcher/src/native_mods/bundle.rs", "MIXINS_REV"),
+                         constant("crates/sunrise-mod-package/src/mixins_tool.rs", "REV"))
 
     def test_a_drifted_copy_is_caught(self):
         self.assertEqual(code("//! Doc.\nuse a::{b,\n c};\nfn f() { g( 1 ) }\n"), "fnf(){g(1)}")

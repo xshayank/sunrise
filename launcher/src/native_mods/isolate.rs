@@ -5,7 +5,7 @@
 use super::Bundle;
 use crate::i18n::trf;
 use std::collections::BTreeSet;
-use sunrise_mod_package::dependencies::Dependency;
+use sunrise_launcher_smod::dependencies::Dependency;
 
 /// Why a mod was left out of a build.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -143,10 +143,10 @@ mod tests {
             id: id.into(),
             requirement: semver::VersionReq::STAR,
             optional,
-            side: sunrise_mod_package::manifest::Side::Both,
+            side: sunrise_launcher_smod::manifest::Side::Both,
             reason: None,
             url: None,
-            order: mod_vocab::DependencyOrder::After,
+            order: sunrise_launcher_smod::manifest::DependencyOrder::After,
         };
         let (on_lib, on_addon, maybe_lib) = (
             [dep("lib", false)],

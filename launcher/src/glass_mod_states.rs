@@ -403,7 +403,7 @@ impl Launcher {
             }
             ("trust", "registry") => {
                 let (reply, _answer) = std::sync::mpsc::channel();
-                let inventory = nm::RegistryInventory {
+                let inventory = nm::Consent {
                     added_crates: 4,
                     build_scripts: vec!["libz-sys".into()],
                     proc_macros: vec!["serde_derive".into()],

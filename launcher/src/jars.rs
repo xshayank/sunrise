@@ -118,17 +118,6 @@ pub fn prepare(
     )
 }
 
-/// A jar of a game-crate manifest (the native build's) in the launcher's own types.
-pub fn from_game(jar: &sunrise_mod_package::manifest::JarRef) -> Result<JarRef, String> {
-    JarRef::new(jar.id().into(), jar.version().into(), jar.sha512().into())
-        .map_err(|error| copies_disagree(jar.id(), &error))
-}
-
-/// The two crates' jar checks are copies, so one refusing what the other accepted is a launcher bug to report.
-fn copies_disagree(id: &str, error: &str) -> String {
-    format!("jar {id}: the launcher's and the game's jar checks disagree ({error}); report it on the launcher")
-}
-
 fn prepare_with(
     home: &Path,
     jars: &[JarRequirement],

@@ -5,10 +5,9 @@
 //!
 //! People read "made for" (a mod's pin) and "fits"; builds by their Nightly names; and items as
 //! what they are ("the hook `player_logged_in`"), never surface ids or hashes.
+use super::uses::{self, ItemKind};
 use crate::i18n::{tr, trf};
-use mod_surface::uses::{self, ItemKind};
 use serde::Deserialize;
-use sunrise_mod_package::mod_surface;
 
 /// At most this many changed items are named in a message; the build log has them all.
 pub const SHOWN_ITEMS: usize = 5;
@@ -88,7 +87,7 @@ pub fn item(id: &str) -> String {
 /// What changed about one item, as people read it: "the hook `player_logged_in` (changed)".
 pub fn change(misfit: &Misfit) -> String {
     let what = item(&misfit.id);
-    let leaf = |id: &str| mod_surface::leaf(id).to_owned();
+    let leaf = |id: &str| uses::leaf(id).to_owned();
     match &misfit.change {
         Change::Removed => trf("{item} (removed)", &[("item", &what)]),
         Change::Changed => trf("{item} (changed)", &[("item", &what)]),

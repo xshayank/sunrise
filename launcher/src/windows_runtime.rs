@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn the_game_finds_every_folder_it_locks_leased_when_played_from_its_slot() {
-        use sunrise_mod_package::runtime_leases::{open_directory, Registry};
+        use sunrise_launcher_smod::runtime_leases::{open_directory, Registry};
         let data = crate::backend::data_dir();
         let name = format!("slot-lease-{}", std::process::id());
         let source = data.join("versions").join(&name);
@@ -286,17 +286,19 @@ mod tests {
         let executable = Path::new(cmd.get_program());
         assert!(executable.starts_with(data.join("run")));
         // The lease check the game makes at start, on what it would lock.
-        let selection = sunrise_mod_package::selection::LaunchArguments::for_command(&cmd).unwrap();
+        let selection =
+            sunrise_launcher_smod::selection::LaunchArguments::for_command(&cmd).unwrap();
         let data = data.canonicalize().unwrap();
         let paths =
-            sunrise_mod_package::holder::lease_paths(executable, &selection, &data, &home).unwrap();
+            sunrise_launcher_smod::holder::lease_paths(executable, &selection, &data, &home)
+                .unwrap();
         let registry = Registry::existing(&data).unwrap();
         for (path, _) in paths {
             assert!(
                 registry
                     .lock(
                         &open_directory(&path).unwrap(),
-                        sunrise_mod_package::locks::LockMode::Shared
+                        sunrise_launcher_smod::locks::LockMode::Shared
                     )
                     .is_ok(),
                 "{} has no lease",

@@ -465,14 +465,3 @@ fn information_requests_do_not_read_packages_or_create_a_cache() {
         assert!(!root.0.join("cache").exists());
     }
 }
-
-#[test]
-fn a_game_crate_jar_becomes_the_launchers_unchanged() {
-    let game =
-        sunrise_mod_package::manifest::JarRef::new("first".into(), "2".into(), "a".repeat(128))
-            .unwrap();
-    assert_eq!(
-        from_game(&game).unwrap(),
-        JarRef::new("first".into(), "2".into(), "a".repeat(128)).unwrap()
-    );
-}

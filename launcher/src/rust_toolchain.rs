@@ -69,7 +69,8 @@ pub const LLVM_MINGW: CToolchain = CToolchain {
 const MINGW_DIR: &str = "mingw64";
 const LLVM_MINGW_DIR: &str = "llvm-mingw";
 
-pub use sunrise_native_build::rust::WINDOWS_X64_TARGET;
+/// The Windows x64 host, whose GNU runtime libraries ship beside the game.
+pub const WINDOWS_X64_TARGET: &str = "x86_64-pc-windows-gnu";
 pub const WINDOWS_ARM64_TARGET: &str = "aarch64-pc-windows-gnullvm";
 pub const WINDOWS_X64_MACHINE: u16 = 0x8664;
 pub const WINDOWS_ARM64_MACHINE: u16 = 0xaa64;
@@ -407,41 +408,67 @@ impl Toolchain {
     }
 }
 
-impl sunrise_native_build::rust::Toolchain for Toolchain {
-    fn command(&self, program: &Path) -> Command {
-        Toolchain::command(self, program)
+/// Whether the player's environment variable `name` stays out of a build: another Rust, a wrapper, or other compiler flags.
+pub fn scrubbed(name: &str) -> bool {
+    const PREFIXES: [&str; 3] = ["CARGO_PROFILE_", "CARGO_BUILD_", "CARGO_TARGET_"];
+    // Windows' variable names ignore case.
+    let name = name.to_ascii_uppercase();
+    // The number of jobs changes no flag: a player may still limit it.
+    if name == "CARGO_BUILD_JOBS" {
+        return false;
     }
-
-    fn cargo(&self) -> PathBuf {
-        Toolchain::cargo(self)
-    }
-
-    fn rustc(&self) -> PathBuf {
-        Toolchain::rustc(self)
-    }
-
-    fn configure_cargo(&self, cmd: &mut Command) {
-        Toolchain::configure_cargo(self, cmd)
-    }
-
-    fn target_libdir(&self) -> Option<PathBuf> {
-        Toolchain::target_libdir(self)
-    }
-
-    fn target(&self) -> &str {
-        self.host.target
-    }
-
-    fn cargo_home(&self) -> PathBuf {
-        cargo_home()
-    }
-
-    fn mingw_bin(&self) -> PathBuf {
-        Toolchain::mingw_bin(self)
-    }
+    SCRUBBED.contains(&name.as_str()) || PREFIXES.iter().any(|p| name.starts_with(p))
 }
 
-pub use sunrise_native_build::rust::{low_priority, scrubbed, SCRUBBED};
+/// `ioprio_set`'s "which" for one process.
+#[cfg(target_os = "linux")]
+const IOPRIO_WHO_PROCESS: libc::c_long = 1;
+/// The best-effort I/O class (2) at its lowest level (7), as `ioprio_set` takes it.
+#[cfg(target_os = "linux")]
+const LOW_IO: libc::c_long = (2 << 13) | 7;
+
+/// Runs `cmd` (a build) below the player's own programs: nice 19 and the lowest best-effort I/O on Unix, below normal on Windows.
+pub fn low_priority(cmd: &mut Command) -> &mut Command {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: two async-signal-safe system calls on the child between fork and exec.
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setpriority(libc::PRIO_PROCESS, 0, 19);
+                #[cfg(target_os = "linux")]
+                {
+                    libc::syscall(
+                        libc::SYS_ioprio_set,
+                        IOPRIO_WHO_PROCESS,
+                        0 as libc::c_long,
+                        LOW_IO,
+                    );
+                }
+                Ok(())
+            });
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
+    }
+    cmd
+}
+
+pub const SCRUBBED: [&str; 8] = [
+    "RUSTUP_TOOLCHAIN",
+    "RUSTC_WRAPPER",
+    "RUSTC_WORKSPACE_WRAPPER",
+    "RUSTFLAGS",
+    "CARGO_ENCODED_RUSTFLAGS",
+    "RUSTDOCFLAGS",
+    "CARGO_ENCODED_RUSTDOCFLAGS",
+    "CARGO_INCREMENTAL",
+];
 
 /// Where commands run so that no player's Cargo configuration reaches them: the filesystem root
 /// above the launcher's data (`/` on Unix, whatever mount the data is on; the drive's root on
@@ -788,8 +815,6 @@ fn link(full: bool) -> Result<(), String> {
         _ => Ok(()),
     }
 }
-
-pub use sunrise_native_build::rust::{blocked_by_app_control, smart_app_control};
 
 /// What a Linux build needs from the system, checked before anything is downloaded: a C compiler
 /// (the linker; `ring` and `hidapi` compile C) with the C library's headers and, for the game

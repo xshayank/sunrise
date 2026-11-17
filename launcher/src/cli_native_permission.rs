@@ -45,7 +45,7 @@ pub(super) fn github_native(
     Ok(())
 }
 
-pub(super) fn registry_consent(inventory: &native_mods::RegistryInventory) -> bool {
+pub(super) fn registry_consent(inventory: &native_mods::Consent) -> bool {
     eprintln!("{}\n{}", inventory.label(), inventory.detail());
     // The headless native route has already required explicit native-code permission.
     true

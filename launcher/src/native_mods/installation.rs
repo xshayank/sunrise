@@ -25,10 +25,10 @@ pub(super) fn install(
     }
     fs::write(partial.join("native-mods.json"), about.to_string()).map_err(|e| e.to_string())?;
     for bundle in mods {
-        package::copy(
+        copy_bundle(
             bundle,
             &partial
-                .join(sunrise_mod_package::mod_list::NATIVE_DIR)
+                .join(sunrise_launcher_smod::mod_list::NATIVE_DIR)
                 .join(&bundle.manifest.id),
         )?;
     }

@@ -55,12 +55,7 @@ fn strings() -> (BTreeSet<String>, BTreeSet<String>) {
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
         &mut files,
     );
-    for crate_src in [
-        "crates/smod/src",
-        "crates/sdk/src",
-        "../crates/sunrise-mod-package/src",
-        "../crates/sunrise-native-build/src",
-    ] {
+    for crate_src in ["crates/smod/src", "crates/sdk/src"] {
         sources(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join(crate_src),
             &mut files,

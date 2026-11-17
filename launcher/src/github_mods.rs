@@ -11,6 +11,7 @@
 //! Callers show [`WARNING`] and ask first (`--trust-native-code`).
 use crate::backend;
 use crate::browser::java;
+use crate::i18n::{tr, trf};
 use crate::native_mods::{self, Bundle, INSTALLED};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -472,7 +473,7 @@ pub fn fetch(found: &Resolved) -> Result<Vec<Packed>, String> {
         "https://codeload.github.com/{}/{}/tar.gz/{}",
         found.owner, found.repo, found.commit
     );
-    let top = native_mods::unpack_archive(&url, &dir.join("source"), MAX_ARCHIVE)?;
+    let top = unpack_archive(&url, &dir.join("source"), MAX_ARCHIVE)?;
     let mods = find_mods(&top)?;
     if mods.is_empty() {
         return Err(format!(
@@ -486,6 +487,43 @@ pub fn fetch(found: &Resolved) -> Result<Vec<Packed>, String> {
         .collect();
     let _ = fs::remove_dir_all(dir.join("source"));
     packed
+}
+
+/// GitHub's archive (`.tar.gz`) of a commit, unpacked into the fresh folder `partial` without links or more than `limit` bytes: its one top folder.
+fn unpack_source(reader: impl std::io::Read, partial: &Path) -> Result<(), String> {
+    let mut archive = tar::Archive::new(reader);
+    for entry in archive.entries().map_err(|e| e.to_string())? {
+        let mut entry =
+            entry.map_err(|e| trf("Source interrupted: {error}", &[("error", &e.to_string())]))?;
+        let kind = entry.header().entry_type();
+        // Match downloaded sources: horizon-mixins refuses links, which the build does not need.
+        if !(kind.is_file() || kind.is_dir()) {
+            continue;
+        }
+        if !entry.unpack_in(partial).map_err(|e| {
+            trf(
+                "Could not unpack the source: {error}",
+                &[("error", &e.to_string())],
+            )
+        })? {
+            return Err(tr("The source archive contains a path outside its folder.").into());
+        }
+    }
+    Ok(())
+}
+
+fn unpack_archive(url: &str, partial: &Path, limit: u64) -> Result<PathBuf, String> {
+    let _ = fs::remove_dir_all(partial);
+    fs::create_dir_all(partial).map_err(|e| e.to_string())?;
+    let reader = flate2::read::GzDecoder::new(backend::get(url)?.into_reader()).take(limit);
+    unpack_source(reader, partial)?;
+    // The archive's one top folder (<repo>-<commit>/) is the source's root.
+    fs::read_dir(partial)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.is_dir())
+        .ok_or_else(|| tr("The source archive is empty.").into())
 }
 
 /// Deletes what [`fetch`] left for `found` (the files of mods not installed).

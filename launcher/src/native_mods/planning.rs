@@ -160,7 +160,7 @@ pub fn update_check(home: &Path, to: &str) -> Result<UpdateCheck, Failed> {
         .map(|bundle| {
             dependencies::from_manifest(
                 &bundle.manifest.dependencies,
-                sunrise_mod_package::manifest::Side::Both,
+                sunrise_launcher_smod::manifest::Side::Both,
             )
         })
         .collect();

@@ -174,7 +174,6 @@
     "sunrise-client-render -> sunrise-shader-api",
     "sunrise-client-render -> sunrise-shaders",
     "sunrise-launcher -> sunrise-prepare",
-    "sunrise-launcher -> sunrise-mod-package",
     "sunrise-native-build -> sunrise-mod-package",
     "sunrise-mod-registry -> sunrise-mod-package",
     "sunrise-client -> sunrise-telemetry"
@@ -195,7 +194,6 @@
     "sunrise-hot-paths-game": "Workspace development fixtures, not a shipped runtime dependency.",
     "sunrise-modding-examples": "Workspace development fixtures, not a shipped runtime dependency.",
     "sunrise-bench -> sunrise-system": "Existing fork dependency across the upstream layer split; recorded baseline, not a new dependency.",
-    "sunrise-launcher -> sunrise-mod-package": "Separate launcher workspace: reads and installs mod packages and modpacks (features index, prebuilt, runtime-process); recorded baseline, not a new dependency.",
     "sunrise-mod-registry -> sunrise-mod-package": "Separate registry workspace: reads and writes the registry index format (feature index only); recorded baseline, not a new dependency.",
     "sunrise-client -> sunrise-telemetry": "Restored upstream Horizon layer: existing engine dependency pending the upstream layer extraction.",
     "sunrise-client-lib -> sunrise-telemetry": "Restored upstream Horizon layer: existing engine dependency pending the upstream layer extraction."
