@@ -19,8 +19,8 @@ pub(super) const PROGRAM: &str = if cfg!(windows) {
     "cargo-sunrise-mod"
 };
 
-/// The running tool's process id, so a cancel stops it and every compiler it started.
-static RUNNING: Mutex<Option<u32>> = Mutex::new(None);
+/// The running tools' process ids, so a cancel stops them and every compiler they started.
+static RUNNING: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 /// The three slice folders a plan names.
 pub(super) struct Package<'a> {
@@ -156,18 +156,11 @@ fn run(
     command
         .arg("native-build")
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    let mut child = crate::process::owned::Owned::spawn(&mut command).map_err(unrun)?;
-    *running() = Some(child.child().id());
-    let stderr = child.child().stderr.take().expect("piped");
-    let errors = std::thread::spawn(move || tail(stderr));
+        .stdout(Stdio::piped());
+    let (mut child, errors) = start(command)?;
     let result = talk(&mut child, plan, consent, on_mod);
     let status = child.wait();
-    *running() = None;
-    let errors = errors.join().unwrap_or_default();
+    let errors = finish(&mut child, errors);
     super::check_cancelled()?;
     let outcome = match (result, status) {
         (Ok(Some(done)), _) => done,
@@ -287,7 +280,36 @@ fn mark_used(paths: &[PathBuf]) {
     }
 }
 
-fn running() -> std::sync::MutexGuard<'static, Option<u32>> {
+/// Starts the tool in its own process group, kept for [`stop`], with its stderr read into a capped tail.
+fn start(
+    mut command: std::process::Command,
+) -> Result<
+    (
+        crate::process::owned::Owned,
+        std::thread::JoinHandle<String>,
+    ),
+    String,
+> {
+    command.stderr(Stdio::piped());
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+    let mut child = crate::process::owned::Owned::spawn(&mut command).map_err(unrun)?;
+    running().push(child.child().id());
+    let stderr = child.child().stderr.take().expect("piped");
+    Ok((child, std::thread::spawn(move || tail(stderr))))
+}
+
+/// Forgets a tool [`start`] started, which ended, and returns the tail of its stderr.
+fn finish(
+    child: &mut crate::process::owned::Owned,
+    errors: std::thread::JoinHandle<String>,
+) -> String {
+    let pid = child.child().id();
+    running().retain(|&running| running != pid);
+    errors.join().unwrap_or_default()
+}
+
+fn running() -> std::sync::MutexGuard<'static, Vec<u32>> {
     RUNNING
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -295,20 +317,19 @@ fn running() -> std::sync::MutexGuard<'static, Option<u32>> {
 
 /// Stops the running tool and every compiler it started.
 pub(super) fn stop() {
-    let Some(pid) = *running() else {
-        return;
-    };
-    // SAFETY: a signal to the tool's own process group, which it leads (`process_group(0)`).
-    #[cfg(unix)]
-    unsafe {
-        libc::kill(-(pid as libc::pid_t), libc::SIGTERM);
+    for pid in running().clone() {
+        // SAFETY: a signal to the tool's own process group, which it leads (`process_group(0)`).
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(-(pid as libc::pid_t), libc::SIGTERM);
+        }
+        #[cfg(windows)]
+        let _ = crate::process::command(crate::process::taskkill())
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
     }
-    #[cfg(windows)]
-    let _ = crate::process::command(crate::process::taskkill())
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
 }
 
 /// `native-check`'s reply: each mod's refusal, verdict or the file it needs.
@@ -332,9 +353,8 @@ pub(super) fn check(program: &Path, plan: &Value) -> Result<Checked, String> {
     command
         .arg("native-check")
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    let mut child = crate::process::owned::Owned::spawn(&mut command).map_err(unrun)?;
+        .stdout(Stdio::piped());
+    let (mut child, errors) = start(command)?;
     let mut input = child.child().stdin.take().expect("piped");
     writeln!(input, "{plan}").map_err(unrun)?;
     drop(input);
@@ -344,8 +364,17 @@ pub(super) fn check(program: &Path, plan: &Value) -> Result<Checked, String> {
         .map_while(Result::ok)
         .filter(|line| !line.trim().is_empty())
         .last();
-    child.wait().map_err(unrun)?;
-    reply(last.as_deref())
+    let status = child.wait().map_err(unrun);
+    let errors = finish(&mut child, errors);
+    super::check_cancelled()?;
+    let result = match (last, status?.code()) {
+        (None, code @ Some(2 | 3)) => Err(ended(code)),
+        (last, _) => reply(last.as_deref()),
+    };
+    if result.is_err() {
+        log_errors(&errors);
+    }
+    result
 }
 
 /// `native-check`'s reply line: its checks, its error, or (no line at all) a tool from before the command.
@@ -358,7 +387,10 @@ fn reply(line: Option<&str>) -> Result<Checked, String> {
     };
     let value: Value = serde_json::from_str(line.ok_or_else(too_old)?).map_err(|_| too_old())?;
     if let Some(error) = value.get("error") {
-        return Err(error["message"].as_str().unwrap_or_default().to_owned());
+        return Err(trf(
+            "The native build tool refused: {error}",
+            &[("error", error["message"].as_str().unwrap_or_default())],
+        ));
     }
     serde_json::from_value(value).map_err(|e| {
         trf(

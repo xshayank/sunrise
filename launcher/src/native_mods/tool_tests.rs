@@ -157,7 +157,9 @@ fn the_tool_hears_the_launchers_proxy_and_github_mirror() {
         "http://127.0.0.1:9|http://127.0.0.1:9|https://mirror.invalid"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
 
+#[test]
 fn a_check_reply_reads_its_verdicts_and_an_old_tool_or_an_error_says_so() {
     use super::super::fit::{Change, Verdict};
     let line = r#"{"contract":2,"route":"prebuilt-api","mods":[
@@ -191,5 +193,24 @@ fn a_check_reply_reads_its_verdicts_and_an_old_tool_or_an_error_says_so() {
     assert_eq!(checked.mods[2].needs.as_deref(), Some("surface"));
     assert!(reply(None).unwrap_err().contains("too old"));
     let error = r#"{"contract":2,"error":{"kind":"unread","message":"mods: not a folder"}}"#;
-    assert_eq!(reply(Some(error)).unwrap_err(), "mods: not a folder");
+    let refused = reply(Some(error)).unwrap_err();
+    assert!(refused.ends_with(": mods: not a folder"), "{refused}");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "daily"]
+fn a_check_by_a_tool_on_another_contract_or_from_before_the_command_says_which_to_update() {
+    let _guard = super::super::tests::scratch_state();
+    let dir =
+        std::env::temp_dir().join(format!("sunrise-native-check-exit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let plan = serde_json::json!({"contract": CONTRACT});
+    fake(&dir, &["ERRORS", "EXIT3"]);
+    let newer = check(&dir.join("tool"), &plan).unwrap_err();
+    assert!(newer.contains("update the launcher"), "{newer}");
+    fake(&dir, &["ERRORS"]);
+    let older = check(&dir.join("tool"), &plan).unwrap_err();
+    assert!(older.contains("install a newer version"), "{older}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
