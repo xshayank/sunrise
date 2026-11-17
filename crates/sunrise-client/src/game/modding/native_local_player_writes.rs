@@ -97,6 +97,12 @@ mod tests {
         mod_platform::testing::with_mods(mods, || {
             with_game(|game| {
                 loaded_client(game);
+                // The write itself sets the flag, either way, before any tick can overwrite it.
+                for flag in [true, false, true] {
+                    game.player.as_mut().unwrap().ground.on_ground = !flag;
+                    assert!(game.set_local_player_on_ground(flag));
+                    assert_eq!(game.player.as_ref().unwrap().ground.on_ground, flag);
+                }
                 let before = game.player.as_ref().unwrap().position;
                 game.tick_remote().unwrap();
                 let body = game.player.as_ref().unwrap();
