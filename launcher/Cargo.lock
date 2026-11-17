@@ -6003,6 +6003,7 @@ dependencies = [
  "sunrise-launcher-release-verify",
  "sunrise-launcher-resolver",
  "sunrise-launcher-scenery",
+ "sunrise-launcher-sdk",
  "sunrise-launcher-shader-api",
  "sunrise-launcher-smod",
  "sunrise-launcher-system",
@@ -6086,6 +6087,18 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "sunrise-launcher-theme",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "sunrise-launcher-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "xz4rust",
 ]
 
 [[package]]

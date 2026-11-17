@@ -1,0 +1,24 @@
+[package]
+name = "sunrise-launcher-sdk"
+version = "0.1.0"
+edition = "2024"
+license = "PolyForm-Shield-1.0.0"
+description = "A Sunrise SDK release as the launcher reads it: the signed sdk.json index and the verified .tar.xz slice unpacker. Copied from the game's sunrise-mod-package without the index writer, so the launcher can leave the game repository."
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tar = { version = "0.4", default-features = false }
+xz4rust = { version = "0.2.3", default-features = false, features = ["std", "crc64"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+# The game workspace's lints, which the copied code was written to.
+[lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+needless_range_loop = "allow"
+large_enum_variant = "allow"

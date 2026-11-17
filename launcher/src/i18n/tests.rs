@@ -57,6 +57,7 @@ fn strings() -> (BTreeSet<String>, BTreeSet<String>) {
     );
     for crate_src in [
         "crates/smod/src",
+        "crates/sdk/src",
         "../crates/sunrise-mod-package/src",
         "../crates/sunrise-native-build/src",
     ] {

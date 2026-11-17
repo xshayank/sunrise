@@ -1,11 +1,11 @@
 use super::*;
 use sunrise_launcher_release_verify::{sha256_hex, sums_file, SigningKey};
-use sunrise_mod_package::sdk::{Build, Mixins, Surface, Toolchain};
+use sunrise_launcher_sdk::{Build, Mixins, Surface, Toolchain};
 
 const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
 const TRIPLE: &str = "x86_64-unknown-linux-gnu";
 /// An xz tar the packager wrote, holding `deps/a.rmeta`.
-const SLICE: &[u8] = include_bytes!("../../../crates/sunrise-mod-package/src/sdk/fixture.tar.xz");
+const SLICE: &[u8] = include_bytes!("../../crates/sdk/src/sdk/fixture.tar.xz");
 
 fn runtime() -> String {
     Asset::name(Kind::Runtime, TRIPLE, Side::Client)
@@ -40,13 +40,13 @@ fn index_of(files: &[(&str, &[u8])], rust: &str) -> Index {
         schema: sdk::SCHEMA,
         build: Build {
             commit: COMMIT.into(),
-            game: sdk::GAME.into(),
+            game: crate::browser::GAME.into(),
             date: "2026-11-13".into(),
             nightly: Some("nightly-2026-11-13".into()),
         },
         package_format: sdk::PACKAGE_FORMAT,
         toolchain: Toolchain { rust: rust.into() },
-        content_api: sunrise_mod_package::manifest::API.into(),
+        content_api: sunrise_launcher_smod::manifest::API.into(),
         surface: Surface {
             hash: "ab".repeat(16),
             previous: None,
@@ -55,11 +55,11 @@ fn index_of(files: &[(&str, &[u8])], rust: &str) -> Index {
             notes: Vec::new(),
         },
         mixins: Mixins {
-            rev: sunrise_mod_package::mixins_tool::REV.into(),
-            patch: sunrise_mod_package::mixins_tool::patch_hash(),
+            rev: "e59da9094f0c2fdda6c627fe9eff22dec6a906f0".into(),
+            patch: "52eaeef7cac10d894066635dc46b12f76d877416317f06eaf385f176de5e1c35".into(),
         },
         assets,
-        inputs: sdk::inputs(),
+        inputs: serde_json::from_str(include_str!("../../crates/sdk/src/sdk/inputs.json")).unwrap(),
     }
 }
 

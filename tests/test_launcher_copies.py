@@ -30,6 +30,11 @@ SAME_BYTES = (
     ("docs/media/village.webp", "../assets/media/village.webp"),
     ("docs/media/underwater.webp", "../assets/media/underwater.webp"),
     ("docs/media/nether.webp", "../assets/media/nether.webp"),
+    ("crates/sunrise-mod-package/src/sdk/fixture.tar.xz", "sdk/src/sdk/fixture.tar.xz"),
+    ("crates/sunrise-mod-package/src/sdk/bomb.tar.xz", "sdk/src/sdk/bomb.tar.xz"),
+    ("crates/sunrise-mod-package/src/sdk/link.tar.xz", "sdk/src/sdk/link.tar.xz"),
+    ("crates/sunrise-mod-package/src/sdk/escape.tar.xz", "sdk/src/sdk/escape.tar.xz"),
+    ("crates/sunrise-mod-package/src/sdk/inputs.json", "sdk/src/sdk/inputs.json"),
     ("LICENSE", "../assets/LICENSE"),
     ("LICENSES/MIT-Horizon.txt", "../assets/LICENSES/MIT-Horizon.txt"),
     ("crates/sunrise-prepare/tests/support/java_probe.rs", "../tests/support/java_probe.rs"),
@@ -116,6 +121,63 @@ def code(text: str) -> str:
     return re.sub(r",([)\]}])", r"\1", re.sub(r"\s+", "", text))
 
 
+# (the game's file, the launcher's copy, the functions copied whole): compared as code, whole-line comments aside.
+SAME_FUNCTIONS = (
+    ("crates/sunrise-mod-package/src/sdk.rs", "launcher/crates/sdk/src/lib.rs", (
+        "route", "to_json", "build_of", "schema", "read", "asset", "route_assets", "verify", "unpack", "lock",
+        "no_locks", "rename_retrying", "busy", "extract", "untar", "entry_target",
+    )),
+)
+
+# (the game's file, the launcher's copy, its edits, the types, impls and constants copied whole, by their head).
+SAME_ITEMS = (
+    ("crates/sunrise-mod-package/src/sdk.rs", "launcher/crates/sdk/src/lib.rs", (
+        ('#[cfg(feature = "prebuilt")]', ""),
+    ), (
+        "pub const INDEX", "pub const SCHEMA", "pub struct Index", "pub struct Build", "pub struct Toolchain",
+        "pub struct Surface", "pub struct ChangeNote", "pub enum Verdict", "pub struct Mixins", "pub struct Asset",
+        "pub enum Kind", "impl Kind", "pub enum Codec", "pub enum Side", "impl Asset", "pub struct Inputs",
+        "pub struct Route", "pub enum Refusal", "impl fmt::Display for Refusal", "impl std::error::Error for Refusal",
+        "struct Written", "struct WrittenAsset", "pub const DICTIONARY_LIMIT", "pub const EXTENSION_LIMIT",
+        "pub const LOCK_SUFFIX", "pub const PARTIAL_SUFFIX", "const PAX_KEYS", "struct Partial", "impl Partial",
+        "impl Drop for Partial",
+    )),
+)
+
+
+def item(path: str, head: str) -> str:
+    """The text of the item starting `head` in the Rust file at `path`, from its attributes to its end."""
+    source = (ROOT / path).read_text(encoding="utf-8")
+    found = re.search(rf"^[ \t]*{re.escape(head)}\b", source, re.M)
+    if not found:
+        raise AssertionError(f"{path} has no {head}")
+    start = found.start()
+    while (above := re.search(r"^[ \t]*(#\[.*\]|//.*)\n\Z", source[:start], re.M)) is not None:
+        start = above.start()
+    depth, at = 0, found.end()
+    while at < len(source):
+        rest = source[at:]
+        if rest.startswith("//"):
+            at = source.find("\n", at)
+        elif rest.startswith('"'):
+            at = re.compile(r'"(\\.|[^"\\])*"', re.S).match(source, at).end() - 1
+        elif rest[0] in "{[(":
+            depth += 1
+        elif rest[0] in "}])":
+            depth -= 1
+            if depth == 0 and rest[0] == "}":
+                return source[start:at + 1]
+        elif rest[0] == ";" and depth == 0:
+            return source[start:at + 1]
+        at += 1
+    raise AssertionError(f"{path}: {head} never closes")
+
+
+def uncommented(text: str) -> str:
+    """`text` without its whole-line comments: a copy may say less than the game's comments."""
+    return re.sub(r"^\s*//.*$", "", text, flags=re.M)
+
+
 def files(path: Path) -> dict:
     if path.is_file():
         return {"": path.read_bytes()}
@@ -179,9 +241,27 @@ class LauncherCopies(unittest.TestCase):
                 digest = hashlib.sha256(code(function(path, name)).encode()).hexdigest()
                 self.assertEqual(digest, pinned, f"{path}'s {name} changed: change {mirror} to match, then pin {digest}")
 
+    def test_functions_copied_whole_are_the_games(self):
+        for game, copy, names in SAME_FUNCTIONS:
+            for name in names:
+                with self.subTest(function=name):
+                    self.assertEqual(code(uncommented(function(copy, name))), code(uncommented(function(game, name))),
+                                     f"{copy}'s {name} differs from {game}'s: copy the change")
+
+    def test_items_copied_whole_are_the_games(self):
+        for game, copy, edits, heads in SAME_ITEMS:
+            for head in heads:
+                with self.subTest(item=head):
+                    original = code(uncommented(item(game, head)))
+                    for old, new in edits:
+                        original = original.replace(code(old), code(new))
+                    self.assertEqual(code(uncommented(item(copy, head))), original,
+                                     f"{copy}'s {head} differs from {game}'s: copy the change")
+
     def test_format_constants_match_the_games(self):
         package_format = int((ROOT / "crates/sunrise-mod-package/src/sdk/package-format").read_text().strip())
         self.assertEqual(constant("launcher/crates/smod/src/index/native.rs", "PACKAGE_FORMAT"), package_format)
+        self.assertEqual(constant("launcher/crates/sdk/src/lib.rs", "PACKAGE_FORMAT"), package_format)
         self.assertEqual(constant("launcher/crates/smod/src/manifest.rs", "USES_FILE"),
                          constant("crates/sunrise-mod-surface/src/uses.rs", "USES_FILE"))
         self.assertEqual(constant("launcher/crates/smod/src/manifest.rs", "MAX_USES"),
@@ -195,6 +275,7 @@ class LauncherCopies(unittest.TestCase):
         self.assertEqual(value('"uses.json"'), "uses.json")
         with self.assertRaises(ValueError):
             value("mod_surface::uses::MAX_USES_BYTES as u64")
+        self.assertEqual(code(uncommented("fn f() {\n    // Why.\n    g(1)\n}")), "fn f(){g(1)}".replace(" ", ""))
 
 
 if __name__ == "__main__":

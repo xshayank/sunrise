@@ -26,8 +26,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use sunrise_launcher_release_verify::{PublicKey, SIGNATURE, SIGNATURE_V2, SUMS};
-use sunrise_mod_package::sdk::{self, Asset, Index, Kind, Side, INDEX};
-use sunrise_native_build::prebuilt::{self, Package, Route};
+use sunrise_launcher_sdk::{self as sdk, Asset, Index, Kind, Side, INDEX};
+use sunrise_native_build::prebuilt::{Package, Route};
 
 /// Replaces the base SDK releases are read from: a URL, or a folder holding `sdk-<build id>/`
 /// folders (and game releases' folders, for their build ids).
@@ -533,10 +533,7 @@ pub(super) fn slices(
     progress: &dyn Fn(Fetched),
 ) -> Result<Package, Refusal> {
     let host = rust_toolchain::host().ok_or(Refusal::Host)?;
-    let side = match target {
-        Target::Client => Side::Client,
-        Target::Server => Side::Server,
-    };
+    let side = side(target);
     let prebuilt = super::root().join("prebuilt");
     let package = slices_in(&prebuilt, sdk, base, route, host.target, side, progress)?;
     crate::storage::mark_used(&prebuilt.join(unit(sdk.commit(), host.target, side)))
@@ -611,7 +608,7 @@ pub(super) fn developer(
     local: &Path,
 ) -> Result<Package, String> {
     let host = rust_toolchain::host().ok_or_else(|| Refusal::Host.to_string())?;
-    let unit = unit(revision, host.target, prebuilt::side(target));
+    let unit = unit(revision, host.target, side(target));
     let out = super::root()
         .join("prebuilt")
         .join(format!("{unit}.developer"));
@@ -634,6 +631,13 @@ pub(super) fn developer(
         api: folder("api")?,
         engine: folder("engine")?,
     })
+}
+
+fn side(target: Target) -> Side {
+    match target {
+        Target::Client => Side::Client,
+        Target::Server => Side::Server,
+    }
 }
 
 /// The folder a build's slices for `triple` and `side` are kept in.

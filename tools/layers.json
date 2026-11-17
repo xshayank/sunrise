@@ -70,6 +70,7 @@
     "sunrise-launcher-release-verify": "sunrise",
     "sunrise-launcher-resolver": "sunrise",
     "sunrise-launcher-scenery": "sunrise",
+    "sunrise-launcher-sdk": "sunrise",
     "sunrise-launcher-shader-api": "sunrise",
     "sunrise-launcher-system": "sunrise",
     "sunrise-launcher-telemetry": "sunrise",

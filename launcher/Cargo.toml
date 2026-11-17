@@ -7,8 +7,8 @@ description = "Downloads, prepares and starts Sunrise builds"
 
 [workspace]
 # The copies in crates/ are checked and tested with the launcher.
-members = ["crates/addresses", "crates/bench", "crates/friends", "crates/smod", "crates/mcp", "crates/nbt", "crates/release-verify", "crates/resolver", "crates/shader-api", "crates/system", "crates/telemetry", "crates/theme"]
-default-members = [".", "crates/addresses", "crates/bench", "crates/friends", "crates/smod", "crates/mcp", "crates/nbt", "crates/release-verify", "crates/resolver", "crates/shader-api", "crates/system", "crates/telemetry", "crates/theme"]
+members = ["crates/addresses", "crates/bench", "crates/friends", "crates/smod", "crates/mcp", "crates/nbt", "crates/release-verify", "crates/resolver", "crates/sdk", "crates/shader-api", "crates/system", "crates/telemetry", "crates/theme"]
+default-members = [".", "crates/addresses", "crates/bench", "crates/friends", "crates/smod", "crates/mcp", "crates/nbt", "crates/release-verify", "crates/resolver", "crates/sdk", "crates/shader-api", "crates/system", "crates/telemetry", "crates/theme"]
 
 [dependencies]
 # Native mods compile against the signed SDK (`native_mods.rs`); `cargo sunrise-mod native-build` runs the same code.
@@ -52,6 +52,8 @@ sunrise-launcher-mcp = { path = "crates/mcp" }
 sunrise-launcher-nbt = { path = "crates/nbt" }
 sunrise-launcher-release-verify = { path = "crates/release-verify" }
 sunrise-launcher-resolver = { path = "crates/resolver" }
+# The SDK index reader and slice unpacker (`native_mods/sdk_cache.rs`).
+sunrise-launcher-sdk = { path = "crates/sdk" }
 sunrise-launcher-shader-api = { path = "crates/shader-api" }
 sunrise-launcher-system = { path = "crates/system" }
 sunrise-launcher-telemetry = { path = "crates/telemetry" }
