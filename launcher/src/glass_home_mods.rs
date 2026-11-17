@@ -335,6 +335,13 @@ impl Launcher {
             {
                 (tr("Does not fit"), ui::warn())
             }
+            Some(id)
+                if self.native_routes(cx).mods.iter().any(|(m, route)| {
+                    m == id && matches!(route, native_mods::Route::Unchecked { .. })
+                }) =>
+            {
+                (tr("Can't check"), ui::warn())
+            }
             Some(_) if unbuilt => (tr("Needs build"), ui::warn()),
             Some(_) => (tr("Ready"), ui::live()),
         };

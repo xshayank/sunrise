@@ -855,6 +855,7 @@ impl Launcher {
         } else {
             match route {
                 Route::Invalid { reason } => ("information-circle", pal.warn, tr("Needs attention").into(), reason.clone()),
+                Route::Unchecked { reason } => ("information-circle", pal.warn, tr("Can't check").into(), reason.clone()),
                 Route::Prebuilt => (
                     "flash",
                     pal.accent,

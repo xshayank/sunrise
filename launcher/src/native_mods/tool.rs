@@ -402,14 +402,16 @@ pub(super) fn ask(
     result
 }
 
+/// What a tool from before a command or reply field this launcher needs is told.
+pub(super) fn too_old() -> String {
+    crate::i18n::tr(
+        "This build's native build tool is too old for this launcher: install a newer version.",
+    )
+    .to_owned()
+}
+
 /// A one-line command's reply: its value, its error's message, or (no line at all) a tool from before the command.
 fn reply(line: Option<&str>) -> Result<Value, String> {
-    let too_old = || {
-        crate::i18n::tr(
-            "This build's native build tool is too old for this launcher: install a newer version.",
-        )
-        .to_owned()
-    };
     let value: Value = serde_json::from_str(line.ok_or_else(too_old)?).map_err(|_| too_old())?;
     if let Some(error) = value.get("error") {
         return Err(trf(

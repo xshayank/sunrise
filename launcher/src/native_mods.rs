@@ -1097,7 +1097,7 @@ pub struct AtStake {
 struct Checks {
     verdicts: Vec<(String, fit::Verdict)>,
     refusals: Vec<(String, String)>,
-    route: Option<String>,
+    route: String,
 }
 
 /// The mods `ids` of `folder` checked against `sdk`'s build by its tool (`native-check`); the surface and build data are fetched only when a mod made for another build needs them.
@@ -1132,8 +1132,13 @@ fn check_all(
             break checked;
         }
     };
+    checks_from(checked, ids).map_err(refused)
+}
+
+/// The checks of `ids` in the tool's reply; a reply naming no route comes from a tool older than this launcher.
+fn checks_from(checked: tool::Checked, ids: &[&str]) -> Result<Checks, String> {
     let mut checks = Checks {
-        route: checked.route,
+        route: checked.route.ok_or_else(tool::too_old)?,
         ..Checks::default()
     };
     for id in ids {
@@ -1141,7 +1146,11 @@ fn check_all(
             continue;
         };
         if let Some(refusal) = &found.refusal {
-            checks.refusals.push((id.to_string(), refusal.clone()));
+            let text = trf(
+                "{mod} can't be built here: {why}",
+                &[("mod", id), ("why", refusal)],
+            );
+            checks.refusals.push((id.to_string(), text));
         } else if let Some(verdict) = &found.verdict {
             checks.verdicts.push((id.to_string(), verdict.clone()));
         }
@@ -1408,7 +1417,7 @@ fn pipeline(
         if let Some((_, refusal)) = checks.refusals.first() {
             return Err(refusal.clone().into());
         }
-        route = checks.route;
+        route = Some(checks.route);
         let mut unusable = Vec::new();
         for (id, verdict) in checks.verdicts {
             match verdict {
@@ -1601,10 +1610,11 @@ fn pipeline(
                 // A developer base using its commit's SDK release asks its route here: no fit was checked.
                 let route = match route.clone() {
                     Some(route) => route,
-                    None => check_all(&incoming, &ids, sdk, &sdk_base)
-                        .map_err(refused)?
-                        .route
-                        .unwrap_or_default(),
+                    None => {
+                        check_all(&incoming, &ids, sdk, &sdk_base)
+                            .map_err(refused)?
+                            .route
+                    }
                 };
                 let slices = sdk_cache::slices(lease, sdk, &sdk_base, &route, target, &fetched)
                     .map_err(refused)?;
@@ -3363,6 +3373,30 @@ mod tests {
     }
 
     #[test]
+    fn a_check_without_a_route_is_a_tool_too_old_and_refusals_name_their_mod() {
+        let reply = |route: &str| -> tool::Checked {
+            serde_json::from_str(&format!(
+                r#"{{"contract":2,{route}"mods":[{{"id":"scripted","refusal":"build scripts aren't allowed"}},{{"id":"fine","verdict":{{"kind":"made-for"}}}}]}}"#
+            ))
+            .unwrap()
+        };
+        let older = checks_from(reply(""), &["scripted", "fine"]).err().unwrap();
+        assert!(older.contains("too old"), "{older}");
+        let checks =
+            checks_from(reply(r#""route":"prebuilt-api","#), &["scripted", "fine"]).unwrap();
+        assert_eq!(checks.route, "prebuilt-api");
+        assert!(matches!(&checks.verdicts[..], [(id, fit::Verdict::MadeFor)] if id == "fine"));
+        let [(id, text)] = &checks.refusals[..] else {
+            panic!("{:?}", checks.refusals)
+        };
+        assert_eq!(id, "scripted");
+        assert!(
+            text.contains("scripted") && text.ends_with("build scripts aren't allowed"),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn folder_planning_reuses_the_build_snapshot_without_restaging_packages() {
         let _guard = scratch_state();
         let original = backend::Settings::load();
@@ -3380,10 +3414,11 @@ mod tests {
         fs::write(&sentinel, b"retained").unwrap();
         let lease = crate::native_cache::Cache::acquire(&backend::build_dir()).unwrap();
         // Its refusal is the SDK tool's to say (`native-check`); without an installed base none is asked.
-        let refused = planning::classify(&folder, None, &lease).err().unwrap();
+        let routes = planning::classify(&folder, None, &lease).unwrap();
         assert!(
-            refused.to_string().contains("Install Sunrise first"),
-            "{refused}"
+            matches!(&routes.mods[..], [(id, Route::Unchecked { reason })]
+                if id == "snapshot" && reason.contains("Install Sunrise first")),
+            "{routes:?}"
         );
         assert_eq!(fs::read(&sentinel).unwrap(), b"retained");
         fs::remove_file(sentinel).unwrap();

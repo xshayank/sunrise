@@ -32,7 +32,20 @@ pub(super) fn classify(
         return Ok(result);
     }
     let ids: Vec<&str> = found.iter().map(|b| b.manifest.id.as_str()).collect();
-    let base = base.ok_or_else(|| tr("Install Sunrise first.").to_string())?;
+    let unchecked = |result: &mut Routes, why: &str| {
+        for (id, route) in &mut result.mods {
+            *route = Route::Unchecked {
+                reason: trf(
+                    "Can't check {mod}: its SDK isn't available. {why}",
+                    &[("mod", id), ("why", why)],
+                ),
+            };
+        }
+    };
+    let Some(base) = base else {
+        unchecked(&mut result, tr("Install Sunrise first."));
+        return Ok(result);
+    };
     let built_on = checked_about(base)?;
     let origin = built_on.as_ref().map_or(base, |about| about.base.as_str());
     let revision = build_revision(base, built_on.as_ref())?;
@@ -48,6 +61,7 @@ pub(super) fn classify(
     let sdk = match sdk_cache::index(&sdk_base, &revision, &keys) {
         Ok(sdk) => sdk,
         Err(refusal) => {
+            unchecked(&mut result, &refusal.to_string());
             result.unavailable = Some(refusal);
             return Ok(result);
         }
@@ -83,27 +97,8 @@ pub(super) fn classify(
                 said(id.as_str(), route);
             }
         }
-        // Nothing is guessed: without the build's files, no mod made for another build "fits".
-        Err(refusal) => {
-            for bundle in &found {
-                let id = &bundle.manifest.id;
-                if bundle.native().sunrise != revision {
-                    said(
-                        id.as_str(),
-                        Route::Invalid {
-                            reason: trf(
-                                "Can't check {mod} against {build}. {why}",
-                                &[
-                                    ("mod", id),
-                                    ("build", &shown),
-                                    ("why", &refusal.to_string()),
-                                ],
-                            ),
-                        },
-                    );
-                }
-            }
-        }
+        // Nothing is guessed: without the build's tool and files, no mod is checked.
+        Err(refusal) => unchecked(&mut result, &refusal.to_string()),
     }
     Ok(result)
 }

@@ -20,6 +20,10 @@ pub enum Route {
     Invalid {
         reason: String,
     },
+    /// Not checked: the build's SDK isn't available (offline, or Sunrise isn't installed); why, as the player reads it.
+    Unchecked {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
