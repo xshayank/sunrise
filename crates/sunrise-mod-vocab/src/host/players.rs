@@ -72,6 +72,23 @@ pub trait PlayersClientHost {
         &mut self,
         boxes: &[[f64; 6]],
     ) -> Result<(), CollisionExclusionsError>;
+    /// Side: client.
+    /// For a client mod: sets the local player's velocity (`Entity.setDeltaMovement`), in blocks
+    /// per tick. Write it from `player_tick_pre`: the tick's own move then integrates it, and
+    /// the position report the move produces is checked by the server as any report is, so a
+    /// velocity the server's speed test or collision check refuses is corrected there. The write
+    /// replaces the velocity outright, as the client's handling of a motion packet does, and
+    /// nothing is sent. `false`, and nothing changes, with no player of its own and for a value
+    /// that is not finite.
+    #[access(WorldOnly)]
+    fn set_local_player_velocity(&mut self, velocity: [f64; 3]) -> bool;
+    /// Side: client.
+    /// For a client mod: sets the local player's on-ground flag. Write it from `player_tick_pre`:
+    /// this tick's jump decision reads it, and the move that follows sets it again from the
+    /// collision, so the report to the server carries the flag the move left. `false`, and
+    /// nothing changes, with no player of its own.
+    #[access(WorldOnly)]
+    fn set_local_player_on_ground(&mut self, on_ground: bool) -> bool;
     /// Moves the window's player through `passage` (#3775), one its server told it of, as
     /// Immersive Portals' client does: its feet, where it was a tick ago (so the frames
     /// between two ticks do not jump), its velocity and its look come out at the far side,
