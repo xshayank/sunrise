@@ -587,6 +587,15 @@ pub(super) fn tool(sdk: &Sdk, base: &Base, progress: &dyn Fn(Fetched)) -> Result
 /// Names a developer's own `cargo-sunrise-mod`, built from the same checkout as [`DEVELOPER_SDK`]'s folder: the tool its builds run.
 pub(super) const DEVELOPER_TOOL: &str = "SUNRISE_LAUNCHER_DEVELOPER_TOOL";
 
+/// The tool [`DEVELOPER_TOOL`] names, honoured as the SDK key override is (a debug launcher), or for a developer base's own SDK.
+pub(super) fn developer_tool(developer_base: bool) -> Option<PathBuf> {
+    (cfg!(debug_assertions) || developer_base)
+        .then(|| std::env::var_os(DEVELOPER_TOOL))
+        .flatten()
+        .map(PathBuf::from)
+        .filter(|program| program.is_file())
+}
+
 /// Names the folder of a prebuilt game built from a developer install's checkout
 /// (`tools/prebuilt_game.py build`). Read for developer installs only: their commit has no release.
 pub(super) const DEVELOPER_SDK: &str = "SUNRISE_LAUNCHER_DEVELOPER_SDK";

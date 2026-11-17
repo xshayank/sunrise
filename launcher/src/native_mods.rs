@@ -435,12 +435,9 @@ pub fn registry_lock(folder: &Path, update: bool) -> Result<(), String> {
     internals_sync::lock(folder, update)
 }
 
-/// The native build tool for the mod in `folder`: a developer's own ([`sdk_cache::DEVELOPER_TOOL`]), else the one its pinned build's SDK carries.
+/// The native build tool for the mod in `folder`: a debug launcher's developer tool ([`sdk_cache::developer_tool`]), else the one its pinned build's SDK carries.
 fn tool_for(folder: &Path) -> Result<PathBuf, String> {
-    if let Some(program) = std::env::var_os(sdk_cache::DEVELOPER_TOOL)
-        .map(PathBuf::from)
-        .filter(|program| program.is_file())
-    {
+    if let Some(program) = sdk_cache::developer_tool(false) {
         return Ok(program);
     }
     let bundle = bundle_in(folder)?.ok_or_else(|| {
@@ -1551,10 +1548,7 @@ fn pipeline(
             .map(PathBuf::from);
         let package = match (local, &sdk) {
             (Some(local), _) => {
-                let program = std::env::var_os(sdk_cache::DEVELOPER_TOOL)
-                    .map(PathBuf::from)
-                    .filter(|program| program.is_file())
-                    .ok_or_else(|| {
+                let program = sdk_cache::developer_tool(true).ok_or_else(|| {
                         trf(
                             "A developer base's own SDK needs its own native build tool: build cargo-sunrise-mod from the same checkout and set {variable} to it.",
                             &[("variable", sdk_cache::DEVELOPER_TOOL)],

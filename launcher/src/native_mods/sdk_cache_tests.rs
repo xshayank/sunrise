@@ -533,3 +533,18 @@ fn a_refusal_offers_the_way_on_its_text_promises() {
     }
     assert_eq!(way(Refusal::Host), None);
 }
+
+#[test]
+fn a_developer_tool_is_honoured_by_a_debug_launcher_or_for_a_developer_base_only() {
+    let _guard = super::super::tests::scratch_state();
+    let program =
+        std::env::temp_dir().join(format!("sunrise-developer-tool-{}", std::process::id()));
+    fs::write(&program, "").unwrap();
+    std::env::set_var(DEVELOPER_TOOL, &program);
+    let any_mod = developer_tool(false);
+    let developer_base = developer_tool(true);
+    std::env::remove_var(DEVELOPER_TOOL);
+    fs::remove_file(&program).unwrap();
+    assert_eq!(any_mod.is_some(), cfg!(debug_assertions));
+    assert_eq!(developer_base, Some(program));
+}
