@@ -547,6 +547,49 @@ pub(super) fn slices(
     Ok(package)
 }
 
+/// The SDK's native build tool for this computer (its `tool` route), fetched beside the slices and kept: the program to run.
+pub(super) fn tool(sdk: &Sdk, base: &Base, progress: &dyn Fn(Fetched)) -> Result<PathBuf, Refusal> {
+    let host = rust_toolchain::host().ok_or(Refusal::Host)?;
+    let build = sdk.shown();
+    let refused = |why: String| Refusal::Refused {
+        build: build.clone(),
+        why,
+    };
+    let names = sdk
+        .index
+        .route_assets("tool", host.target, Side::Client)
+        .map_err(|r| match r {
+            sdk::Refusal::Missing(_) => Refusal::Host,
+            sdk::Refusal::Route(_) => {
+                refused(tr("its SDK has no native build tool: install a newer version").into())
+            }
+            other => refused(other.to_string()),
+        })?;
+    let into =
+        super::root()
+            .join("prebuilt")
+            .join(format!("{}-{}-tool", sdk.commit(), host.target));
+    let mut fetched = Fetched::default();
+    for name in &names {
+        if !stamp_holds(sdk, name, &into) {
+            fetched.total += sdk
+                .index
+                .asset(name)
+                .map_err(|r| refused(r.to_string()))?
+                .size;
+        }
+    }
+    progress(fetched);
+    for name in &names {
+        fetch_into(sdk, base, name, &into, &mut fetched, progress)?;
+    }
+    crate::storage::mark_used(&into).map_err(|error| Refusal::Cache(super::cache_error(error)))?;
+    Ok(into.join(super::tool::PROGRAM))
+}
+
+/// Names a developer's own `cargo-sunrise-mod`, built from the same checkout as [`DEVELOPER_SDK`]'s folder: the tool its builds run.
+pub(super) const DEVELOPER_TOOL: &str = "SUNRISE_LAUNCHER_DEVELOPER_TOOL";
+
 /// Names the folder of a prebuilt game built from a developer install's checkout
 /// (`tools/prebuilt_game.py build`). Read for developer installs only: their commit has no release.
 pub(super) const DEVELOPER_SDK: &str = "SUNRISE_LAUNCHER_DEVELOPER_SDK";

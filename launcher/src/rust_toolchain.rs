@@ -361,8 +361,15 @@ impl Toolchain {
     /// Adds the ARM64-specific Rust flags Cargo needs for Windows imports and a self-contained
     /// unwind runtime. A Cargo config value keeps paths with spaces intact.
     pub fn configure_cargo(&self, cmd: &mut Command) {
+        for value in self.cargo_config() {
+            cmd.arg("--config").arg(value);
+        }
+    }
+
+    /// The `--config` values every cargo command of this toolchain gets (Windows ARM64's flags; none elsewhere).
+    pub fn cargo_config(&self) -> Vec<String> {
         if self.host.target != WINDOWS_ARM64_TARGET {
-            return;
+            return Vec::new();
         }
         let dlltool = self.mingw_bin().join(exe("llvm-dlltool"));
         let rustflags = toml::Value::Array(vec![
@@ -373,9 +380,14 @@ impl Toolchain {
             toml::Value::String("-C".into()),
             toml::Value::String(format!("dlltool={}", dlltool.display())),
         ]);
-        cmd.arg("--config").arg(format!(
+        vec![format!(
             "target.{WINDOWS_ARM64_TARGET}.rustflags={rustflags}"
-        ));
+        )]
+    }
+
+    /// The folder of the C and link programs this toolchain brings, when it brings them (Windows).
+    pub fn c_bin(&self) -> Option<PathBuf> {
+        self.host.c_toolchain.map(|_| self.mingw_bin())
     }
 
     /// `rustc --version`, once the toolchain answers.

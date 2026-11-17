@@ -43,10 +43,14 @@ published SDK, build it from the same checkout and name its folder; one folder h
 
 ```sh
 python3 tools/prebuilt_game.py build SDK_FOLDER            # add --server for a dedicated server
-SUNRISE_LAUNCHER_DEVELOPER_SDK=SDK_FOLDER sunrise-launcher native-build MODS --version DEVELOPER_TAG --trust-native-code
+cargo build --release -p cargo-sunrise-mod                 # the native build tool, from the same checkout
+SUNRISE_LAUNCHER_DEVELOPER_SDK=SDK_FOLDER SUNRISE_LAUNCHER_DEVELOPER_TOOL=target/release/cargo-sunrise-mod \
+  sunrise-launcher native-build MODS --version DEVELOPER_TAG --trust-native-code
 ```
 
-The variable is read for developer bases only, and the folder is used where it is. It must be
+The variables are read for developer bases only, and the folder is used where it is. The launcher compiles
+through the tool (`cargo sunrise-mod native-build`, [its contract](../../reference/sdk/08-native-build.md)), as it
+runs the one a published SDK carries. It must be
 that commit's build for this computer, side and the launcher's Rust, as a downloaded SDK must;
 anything else is refused. Without it, the launcher uses the commit's SDK release when one is
 published, and otherwise says the build has no mod tools. The native mod builder never compiles the checkout itself. For native mixins, the pinned
