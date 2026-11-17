@@ -26,7 +26,6 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use sunrise_launcher_release_verify::{PublicKey, SIGNATURE, SIGNATURE_V2, SUMS};
-use sunrise_mod_package::mod_surface;
 use sunrise_mod_package::sdk::{self, Asset, Index, Kind, Side, INDEX};
 use sunrise_native_build::prebuilt::{self, Package, Route};
 
@@ -465,9 +464,8 @@ fn compare_versions(a: &str, b: &str) -> Option<std::cmp::Ordering> {
     Some(parts(a)?.cmp(&parts(b)?))
 }
 
-/// The surface of `sdk`'s build: the kept copy, else fetched from `base` and checked against the
-/// index, then kept. Small (under 1.5 MB) and kept, so a fit is told offline once a build was seen.
-pub(super) fn surface(sdk: &Sdk, base: &Base) -> Result<mod_surface::Surface, Refusal> {
+/// The kept `surface.json` of `sdk`'s build, else fetched from `base`, checked against the index and kept. Small (under 1.5 MB), so a fit is told offline once a build was seen.
+pub(super) fn surface_file(sdk: &Sdk, base: &Base) -> Result<PathBuf, Refusal> {
     const NAME: &str = "surface.json";
     let build = sdk.shown();
     let refused = |why: String| Refusal::Refused {
@@ -476,9 +474,9 @@ pub(super) fn surface(sdk: &Sdk, base: &Base) -> Result<mod_surface::Surface, Re
     };
     let kept = sdk.dir.join(NAME);
     let listed = sdk.index.asset(NAME).map_err(|r| refused(r.to_string()))?;
-    let bytes = match fs::read(&kept) {
+    match fs::read(&kept) {
         // Kept only once verified; a size that changed since is fetched again.
-        Ok(bytes) if bytes.len() as u64 == listed.size => bytes,
+        Ok(bytes) if bytes.len() as u64 == listed.size => {}
         _ => {
             let tag = tag(sdk.commit());
             let body = base
@@ -499,10 +497,9 @@ pub(super) fn surface(sdk: &Sdk, base: &Base) -> Result<mod_surface::Surface, Re
                 .verify(NAME, bytes.as_slice())
                 .map_err(|r| refused(r.to_string()))?;
             write_whole(&kept, &bytes)?;
-            bytes
         }
-    };
-    mod_surface::Surface::read(&bytes).map_err(|error| refused(error.to_string()))
+    }
+    Ok(kept)
 }
 
 /// The folder of `sdk`'s build data (`points.json`, `internals.json`, `loops.json`,

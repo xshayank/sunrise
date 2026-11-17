@@ -5,13 +5,13 @@
 use super::*;
 use build_mode::ModKind;
 use instance_mods::ModRow;
+use sunrise_launcher::native_mods::fit::{Change, Misfit};
 use sunrise_launcher::native_mods::{
     self as nm,
     fit::{self, Verdict},
     sdk_cache::Refusal as Sdk,
     Route, Step,
 };
-use sunrise_mod_package::mod_surface::uses::{Change, Misfit};
 
 /// What a preview puts in place of what the launcher reads from disk.
 #[derive(Default)]
@@ -325,14 +325,14 @@ impl Launcher {
                         "hitbox-plus",
                         Verdict::Exact {
                             made_for: MADE_FOR.into(),
-                            why: "native",
+                            why: "native".into(),
                         },
                     ),
                     (
                         "deep-tools",
                         Verdict::Exact {
                             made_for: MADE_FOR.into(),
-                            why: "internals",
+                            why: "internals".into(),
                         },
                     ),
                     (

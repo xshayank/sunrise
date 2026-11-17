@@ -248,3 +248,7 @@ mod tests {
         assert_eq!(elsewhere.route, None);
     }
 }
+
+#[cfg(test)]
+#[path = "check_tests.rs"]
+mod fit_tests;

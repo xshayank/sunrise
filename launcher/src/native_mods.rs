@@ -11,9 +11,8 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use sunrise_mod_package::dependencies;
-use sunrise_mod_package::mod_surface;
 pub use sunrise_native_build::Refusal;
-use sunrise_native_build::{api, internals, package, prebuilt, registry_generate};
+use sunrise_native_build::{api, package, prebuilt, registry_generate};
 use sunrise_native_build::{bundle_files, is_revision, registry_rustc};
 pub use sunrise_native_build::{
     bundle_in, bundles, check_cancelled, copy_bundle, digest, failure, scan_bundles, source_digest,
@@ -1080,43 +1079,46 @@ pub struct AtStake {
     pub base: String,
 }
 
-/// Each project's fit to `sdk`'s build, by mod id, in `projects`' order; the surface and build
-/// data are read only when a mod made for another build asks.
+/// Each project's fit to `sdk`'s build, by mod id, in `projects`' order, as the SDK's tool says (`native-check` on `folder`); the surface and build data are fetched only when a mod made for another build needs them.
 fn judge_all(
+    folder: &Path,
     projects: &[api::Project<'_>],
     sdk: &sdk_cache::Sdk,
     base: &sdk_cache::Base,
 ) -> Result<Vec<(String, fit::Verdict)>, sdk_cache::Refusal> {
-    let mut surface: Option<std::rc::Rc<mod_surface::Surface>> = None;
-    let mut catalog: Option<std::rc::Rc<internals::Catalog>> = None;
-    let mut verdicts = Vec::new();
-    for project in projects {
-        let verdict = fit::judge(
-            project,
-            sdk.commit(),
-            &mut || {
-                if surface.is_none() {
-                    surface = Some(std::rc::Rc::new(sdk_cache::surface(sdk, base)?));
-                }
-                Ok(surface.clone().expect("read above"))
-            },
-            &mut || {
-                if catalog.is_none() {
-                    let dir = sdk_cache::build_data(sdk, base)?;
-                    let read = internals::Catalog::read(&dir).map_err(|why| {
-                        sdk_cache::Refusal::Refused {
-                            build: sdk.shown(),
-                            why,
-                        }
-                    })?;
-                    catalog = Some(std::rc::Rc::new(read));
-                }
-                Ok(catalog.clone().expect("read above"))
-            },
-        )?;
-        verdicts.push((project.bundle.manifest.id.clone(), verdict));
+    if projects.is_empty() {
+        return Ok(Vec::new());
     }
-    Ok(verdicts)
+    let refused = |why: String| sdk_cache::Refusal::Refused {
+        build: sdk.shown(),
+        why,
+    };
+    let program = sdk_cache::tool(sdk, base, &|_| {})?;
+    let mut plan = serde_json::json!({"contract": 2, "mods": folder, "build": sdk.commit()});
+    let checked = loop {
+        let checked = tool::check(&program, &plan).map_err(refused)?;
+        let needs = |what: &str| {
+            checked
+                .mods
+                .iter()
+                .any(|m| m.needs.as_deref() == Some(what))
+        };
+        if needs("surface") && plan.get("surface").is_none() {
+            plan["surface"] = serde_json::json!(sdk_cache::surface_file(sdk, base)?);
+        } else if needs("build-data") && plan.get("build_data").is_none() {
+            plan["build_data"] = serde_json::json!(sdk_cache::build_data(sdk, base)?);
+        } else {
+            break checked;
+        }
+    };
+    Ok(projects
+        .iter()
+        .filter_map(|project| {
+            let id = &project.bundle.manifest.id;
+            let verdict = checked.mods.iter().find(|m| &m.id == id)?.verdict.clone()?;
+            Some((id.clone(), verdict))
+        })
+        .collect())
 }
 
 /// A build's refusal of the mod tools, as the player reads it. A refused signature is short on
@@ -1377,7 +1379,8 @@ fn pipeline(
     let mut fitted: Vec<String> = Vec::new();
     if let Some(sdk) = &sdk {
         progress(Step::Checking(projects.len()));
-        let verdicts = judge_all(&projects, sdk, &sdk_base).map_err(|r| r.to_string())?;
+        let verdicts =
+            judge_all(&incoming, &projects, sdk, &sdk_base).map_err(|r| r.to_string())?;
         let mut unusable = Vec::new();
         for (id, verdict) in verdicts {
             match verdict {

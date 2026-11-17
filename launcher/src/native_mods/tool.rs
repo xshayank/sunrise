@@ -311,6 +311,63 @@ pub(super) fn stop() {
         .status();
 }
 
+/// `native-check`'s reply: each mod's refusal, verdict or the file it needs.
+#[derive(Debug, Deserialize)]
+pub(super) struct Checked {
+    pub mods: Vec<CheckedMod>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct CheckedMod {
+    pub id: String,
+    #[serde(default)]
+    pub verdict: Option<super::fit::Verdict>,
+    #[serde(default)]
+    pub needs: Option<String>,
+}
+
+/// Asks the tool at `program` how the mods `plan` names stand against its build (`native-check`).
+pub(super) fn check(program: &Path, plan: &Value) -> Result<Checked, String> {
+    let mut command = crate::process::command(program);
+    command
+        .arg("native-check")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = crate::process::owned::Owned::spawn(&mut command).map_err(unrun)?;
+    let mut input = child.child().stdin.take().expect("piped");
+    writeln!(input, "{plan}").map_err(unrun)?;
+    drop(input);
+    let output = child.child().stdout.take().expect("piped");
+    let last = BufReader::new(output)
+        .lines()
+        .map_while(Result::ok)
+        .filter(|line| !line.trim().is_empty())
+        .last();
+    child.wait().map_err(unrun)?;
+    reply(last.as_deref())
+}
+
+/// `native-check`'s reply line: its checks, its error, or (no line at all) a tool from before the command.
+fn reply(line: Option<&str>) -> Result<Checked, String> {
+    let too_old = || {
+        crate::i18n::tr(
+            "This build's native build tool is too old for this launcher: install a newer version.",
+        )
+        .to_owned()
+    };
+    let value: Value = serde_json::from_str(line.ok_or_else(too_old)?).map_err(|_| too_old())?;
+    if let Some(error) = value.get("error") {
+        return Err(error["message"].as_str().unwrap_or_default().to_owned());
+    }
+    serde_json::from_value(value).map_err(|e| {
+        trf(
+            "The native build tool's answer couldn't be read: {error}. Update the launcher.",
+            &[("error", &e.to_string())],
+        )
+    })
+}
+
 fn unrun(error: std::io::Error) -> String {
     trf(
         "The native build tool couldn't run: {error}",
