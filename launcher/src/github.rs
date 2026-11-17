@@ -127,6 +127,11 @@ fn mirror_url_with(url: &str, base: &str) -> Option<String> {
         .then(|| format!("{}{path}", base.trim_end_matches('/')))
 }
 
+/// The mirror `SUNRISE_GITHUB_MIRROR` names, when there is one: what a child the launcher starts is told too.
+pub(crate) fn mirror_named() -> Option<String> {
+    Some(mirror_base()).filter(|base| !base.is_empty())
+}
+
 fn mirror_base() -> String {
     std::env::var("SUNRISE_GITHUB_MIRROR").unwrap_or_else(|_| MIRROR.to_owned())
 }

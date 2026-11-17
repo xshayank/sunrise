@@ -312,7 +312,12 @@ pub fn cancel() {
 /// The failed build's error, led by its blamed mod in the launcher's own words, as [`compile_failed_mod`] and [`refused_mod`] read it.
 fn blamed_text(failed: tool::Failure) -> String {
     let lead = match failed.blame {
-        None => return failed.error,
+        None => {
+            return trf(
+                "The native build failed: {error}",
+                &[("error", &failed.error)],
+            )
+        }
         Some(tool::Blame {
             mod_id,
             kind: tool::BlameKind::Compile,

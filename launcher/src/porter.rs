@@ -245,9 +245,7 @@ impl Porter {
     fn run(&self, args: &[&std::ffi::OsStr], log: Log) -> Result<Option<Value>, String> {
         let mut command = crate::process::command(&self.program);
         command.args(args).arg("--json");
-        if let Some(spec) = crate::proxy::spec_for(crate::browser::modrinth::API) {
-            command.env("HTTPS_PROXY", &spec).env("HTTP_PROXY", spec);
-        }
+        crate::proxy::child_env(&mut command);
         command
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

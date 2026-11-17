@@ -31,6 +31,16 @@ pub fn spec_for(url: &str) -> Option<String> {
     setting().or_else(|| crate::net::env_for(scheme))
 }
 
+/// Puts the launcher's network settings in `command`'s environment, as the programs it starts (the porter, the native build tool) read them: its proxy setting in `HTTPS_PROXY`/`HTTP_PROXY` (the environment's own, and `NO_PROXY`, pass through), and the GitHub mirror.
+pub fn child_env(command: &mut std::process::Command) {
+    if let Some(spec) = setting() {
+        command.env("HTTPS_PROXY", &spec).env("HTTP_PROXY", spec);
+    }
+    if let Some(mirror) = crate::github::mirror_named() {
+        command.env("SUNRISE_GITHUB_MIRROR", mirror);
+    }
+}
+
 /// The proxy to reach `url` through: `spec_for`'s address, read as one.
 pub fn for_url(url: &str) -> Option<ureq::Proxy> {
     spec_for(url).and_then(|spec| crate::net::parse(&spec))

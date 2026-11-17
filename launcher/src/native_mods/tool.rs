@@ -139,7 +139,7 @@ pub(super) fn build(
     on_mod: &dyn Fn(&str, usize, usize),
 ) -> Result<Built, Failure> {
     run(
-        rust.command(program),
+        command(rust, program),
         &plan_line(rust, plan),
         consent,
         on_mod,
@@ -157,23 +157,85 @@ fn run(
         .arg("native-build")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     let mut child = crate::process::owned::Owned::spawn(&mut command).map_err(unrun)?;
     *running() = Some(child.child().id());
+    let stderr = child.child().stderr.take().expect("piped");
+    let errors = std::thread::spawn(move || tail(stderr));
     let result = talk(&mut child, plan, consent, on_mod);
     let status = child.wait();
     *running() = None;
+    let errors = errors.join().unwrap_or_default();
     super::check_cancelled()?;
-    match (result, status) {
+    let outcome = match (result, status) {
         (Ok(Some(done)), _) => done,
-        (Ok(None), Ok(status)) => Err(trf(
-            "The native build tool stopped ({status}) without saying why.",
-            &[("status", &status.to_string())],
-        )
-        .into()),
+        (Ok(None), Ok(status)) => Err(ended(status.code()).into()),
         (Err(error), _) | (Ok(None), Err(error)) => Err(unrun(error).into()),
+    };
+    if outcome.is_err() {
+        log_errors(&errors);
+    }
+    outcome
+}
+
+/// `program` on `rust`, with the launcher's proxy setting and GitHub mirror in its environment.
+pub(super) fn command(rust: &Toolchain, program: &Path) -> std::process::Command {
+    let mut command = rust.command(program);
+    crate::proxy::child_env(&mut command);
+    command
+}
+
+/// The most of the tool's error output kept for the build log: its last lines.
+const MAX_ERRORS: usize = 16 << 10;
+
+/// The last lines of `stream`, read lossily, at most [`MAX_ERRORS`] bytes of them.
+pub(super) fn tail(stream: impl std::io::Read) -> String {
+    let mut kept = std::collections::VecDeque::new();
+    let mut size = 0;
+    for line in BufReader::new(stream).split(b'\n').map_while(Result::ok) {
+        let line = String::from_utf8_lossy(&line).trim_end().to_owned();
+        size += line.len() + 1;
+        kept.push_back(line);
+        while size > MAX_ERRORS {
+            size -= kept.pop_front().map_or(0, |line| line.len() + 1);
+        }
+    }
+    Vec::from(kept).join("\n")
+}
+
+/// Puts the end of what a failed tool wrote on stderr in the build log, where its failure message points.
+pub(super) fn log_errors(errors: &str) {
+    if !errors.is_empty() {
+        let _ = super::append_log(&trf(
+            "The native build tool's error output (its last lines):\n{output}",
+            &[("output", errors)],
+        ));
+    }
+}
+
+/// Why the tool ended without its last line, from its exit code: 3 is a tool on another contract, 2 one that didn't take the request.
+pub(super) fn ended(code: Option<i32>) -> String {
+    match code {
+        Some(3) => crate::i18n::tr(
+            "This launcher is too old for this SDK's native build tool: update the launcher.",
+        )
+        .to_owned(),
+        Some(2) => crate::i18n::tr(
+            "The native build tool didn't accept the launcher's request: see the build log.",
+        )
+        .to_owned(),
+        _ => trf(
+            "The native build tool stopped ({status}) without saying why: see the build log.",
+            &[(
+                "status",
+                &code.map_or_else(
+                    || crate::i18n::tr("by a signal").to_owned(),
+                    |c| c.to_string(),
+                ),
+            )],
+        ),
     }
 }
 
@@ -242,7 +304,7 @@ pub(super) fn stop() {
         libc::kill(-(pid as libc::pid_t), libc::SIGTERM);
     }
     #[cfg(windows)]
-    let _ = crate::process::command("taskkill")
+    let _ = crate::process::command(crate::process::taskkill())
         .args(["/PID", &pid.to_string(), "/T", "/F"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())

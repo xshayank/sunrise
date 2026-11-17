@@ -10,6 +10,17 @@ pub mod supervisor;
 use std::ffi::OsStr;
 use std::process::Command;
 
+/// Windows' own `taskkill`, by its full path: never one a folder on `PATH` puts first.
+#[cfg(windows)]
+pub fn taskkill() -> std::path::PathBuf {
+    std::env::var_os("SystemRoot")
+        .map_or_else(
+            || std::path::PathBuf::from(r"C:\Windows"),
+            std::path::PathBuf::from,
+        )
+        .join(r"System32\taskkill.exe")
+}
+
 pub fn command(program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
     hide_console(&mut command);

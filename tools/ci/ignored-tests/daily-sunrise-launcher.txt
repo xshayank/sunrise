@@ -1,6 +1,8 @@
 # The daily tests of sunrise-launcher: each is #[ignore = "daily"] in its source and runs once a day in the daily run,
 # where it must pass (README.md). Rows: PACKAGE TEST TARGET daily REASON, sorted; tools/ci/move_to_daily.py writes them.
+sunrise-launcher native_mods::tool::tests::a_tool_on_another_contract_says_to_update_the_launcher_and_logs_its_errors lib daily child-process
 sunrise-launcher native_mods::tool::tests::a_tool_run_reports_its_mods_asks_consent_and_ends_built_or_blamed lib daily child-process
+sunrise-launcher native_mods::tool::tests::the_tool_hears_the_launchers_proxy_and_github_mirror lib daily child-process
 sunrise-launcher net::tests::a_request_goes_through_a_socks_proxy lib daily network
 sunrise-launcher porter::tests::a_porter_run_logs_its_lines_keeps_its_status_and_says_what_failed lib daily child-process
 sunrise-launcher process::owned::tests::quitting_stops_the_children_still_running lib daily child-process
