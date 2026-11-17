@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use sunrise_mod_package::dependencies;
 pub use sunrise_native_build::Refusal;
-use sunrise_native_build::{api, package, prebuilt, registry_generate};
+use sunrise_native_build::{api, package, prebuilt};
 use sunrise_native_build::{bundle_files, is_revision, registry_rustc};
 pub use sunrise_native_build::{
     bundle_in, bundles, check_cancelled, copy_bundle, digest, failure, scan_bundles, source_digest,
@@ -338,9 +338,7 @@ pub fn internals_rustc_wrapper() -> Option<i32> {
     registry_rustc::wrapper().or_else(sunrise_native_build::discover::rustc_wrapper)
 }
 
-pub fn sync_internals(
-    folder: &Path,
-) -> Result<Vec<sunrise_mod_package::internals::ListedInternal>, Failed> {
+pub fn sync_internals(folder: &Path) -> Result<serde_json::Value, Failed> {
     install_host();
     require_consent()?;
     internals_sync::check(folder).map_err(Failed::Other)
@@ -430,13 +428,31 @@ pub(crate) fn stage_installed(home: &Path, out: PathBuf) -> Result<Option<PathBu
 
 /// Generate only registry pins; never compiles source or modifies manifests.
 pub fn registry_lock(folder: &Path, update: bool) -> Result<(), String> {
-    install_host();
-    let bundles = bundles(folder)?;
-    if bundles.len() != 1 {
+    if bundles(folder)?.len() != 1 {
         return Err("native-lock requires one mod folder".into());
     }
     fs::create_dir_all(root()).map_err(|e| e.to_string())?;
-    registry_generate::generate(|| rust_toolchain::install(|_| {}), &bundles[0], update)
+    internals_sync::lock(folder, update)
+}
+
+/// The native build tool for the mod in `folder`: a developer's own ([`sdk_cache::DEVELOPER_TOOL`]), else the one its pinned build's SDK carries.
+fn tool_for(folder: &Path) -> Result<PathBuf, String> {
+    if let Some(program) = std::env::var_os(sdk_cache::DEVELOPER_TOOL)
+        .map(PathBuf::from)
+        .filter(|program| program.is_file())
+    {
+        return Ok(program);
+    }
+    let bundle = bundle_in(folder)?.ok_or_else(|| {
+        trf(
+            "{path} is not a native mod project.",
+            &[("path", &folder.display().to_string())],
+        )
+    })?;
+    let base = sdk_cache::Base::from_env();
+    let keys = sunrise_launcher_release_verify::sdk_keys_for(backend::REPO);
+    let sdk = sdk_cache::index(&base, &bundle.native().sunrise, &keys).map_err(refused)?;
+    sdk_cache::tool(&sdk, &base, &|_| {}).map_err(refused)
 }
 
 /// The one value the bundles pin for `which` (each mod's `get`), else `fallback`; mods that pin
@@ -1544,7 +1560,10 @@ fn pipeline(
                             &[("variable", sdk_cache::DEVELOPER_TOOL)],
                         )
                     })?;
-                (sdk_cache::developer(&revision, target, &local)?, program)
+                (
+                    sdk_cache::developer(&program, &revision, target, &local)?,
+                    program,
+                )
             }
             (None, sdk) => {
                 // A developer install without its own prebuilt game uses its commit's SDK

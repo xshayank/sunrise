@@ -595,15 +595,36 @@ pub(super) const DEVELOPER_SDK: &str = "SUNRISE_LAUNCHER_DEVELOPER_SDK";
 /// `revision`'s for this computer and `target`, then laid out afresh as its slices by links, so
 /// the developer's folder is never changed. A release's game comes from its SDK instead
 /// ([`slices`]).
-pub(super) fn developer(revision: &str, target: Target, local: &Path) -> Result<Package, String> {
+pub(super) fn developer(
+    program: &Path,
+    revision: &str,
+    target: Target,
+    local: &Path,
+) -> Result<Package, String> {
     let host = rust_toolchain::host().ok_or_else(|| Refusal::Host.to_string())?;
-    prebuilt::check_identity(local, revision, host.target, target)?;
     let unit = unit(revision, host.target, prebuilt::side(target));
-    let build = super::root()
+    let out = super::root()
         .join("prebuilt")
         .join(format!("{unit}.developer"));
-    let _ = fs::remove_dir_all(&build);
-    prebuilt::lay_out(local, &build, true)
+    let reply = super::tool::ask(
+        crate::process::command(program),
+        "native-layout",
+        &serde_json::json!({
+            "prebuilt": local, "build": revision, "host": host.target,
+            "target": target.name(), "out": out,
+        }),
+    )?;
+    let folder = |slice: &str| {
+        reply["package"][slice]
+            .as_str()
+            .map(PathBuf::from)
+            .ok_or_else(|| tr("The native build tool laid out no package.").to_owned())
+    };
+    Ok(Package {
+        runtime: folder("runtime")?,
+        api: folder("api")?,
+        engine: folder("engine")?,
+    })
 }
 
 /// The folder a build's slices for `triple` and `side` are kept in.

@@ -172,7 +172,7 @@ fn a_check_reply_reads_its_verdicts_and_an_old_tool_or_an_error_says_so() {
         {"id":"later","refusal":null,"verdict":null,"needs":"surface"},
         {"id":"refused","refusal":"it has a build script","verdict":null,"needs":null}]}"#
         .replace('\n', "");
-    let checked = reply(Some(&line)).unwrap();
+    let checked: Checked = serde_json::from_value(reply(Some(&line)).unwrap()).unwrap();
     assert_eq!(checked.mods[0].verdict, Some(Verdict::MadeFor));
     let Some(Verdict::DoesNotFit { misfits, .. }) = &checked.mods[1].verdict else {
         panic!("{:?}", checked.mods[1]);
@@ -212,5 +212,38 @@ fn a_check_by_a_tool_on_another_contract_or_from_before_the_command_says_which_t
     fake(&dir, &["ERRORS"]);
     let older = check(&dir.join("tool"), &plan).unwrap_err();
     assert!(older.contains("install a newer version"), "{older}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "daily"]
+fn a_one_line_command_gets_its_name_and_a_contract_and_answers_one_line() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("sunrise-native-ask-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let program = dir.join("tool");
+    std::fs::write(
+        &program,
+        "#!/bin/sh\nread plan\nprintf '%s\\n' \"$1\" \"$plan\" > \"$(dirname \"$0\")/asked\"\necho '{\"contract\":2,\"lock\":\"/m/Cargo.lock\"}'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let reply = ask(
+        std::process::Command::new(&program),
+        "native-lock",
+        &serde_json::json!({"mods": "/m", "update": true}),
+    )
+    .unwrap();
+    assert_eq!(reply["lock"], "/m/Cargo.lock");
+    let asked = std::fs::read_to_string(dir.join("asked")).unwrap();
+    let (command, plan) = asked.split_once('\n').unwrap();
+    assert_eq!(command, "native-lock");
+    let plan: Value = serde_json::from_str(plan.trim()).unwrap();
+    assert_eq!(
+        (plan["contract"].as_u64(), plan["update"].as_bool()),
+        (Some(2), Some(true))
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
