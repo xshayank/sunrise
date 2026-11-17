@@ -2,6 +2,7 @@
 //! `.smod` files on disk, listed in an index the way the registry lists them.
 use super::*;
 use crate::browser::sunrise::tests::{sample, scratch};
+const GAME: &str = crate::backend::PINNED_GAME;
 
 const MANIFEST: &str = "id = \"ruby\"\nname = \"Ruby\"\napi = \"0.2\"\nside = \"both\"\n\
                         capabilities = [\"registries\"]\n";
@@ -61,7 +62,10 @@ fn index_of(versions: &[(&str, &str, &Path)]) -> Index {
     index
 }
 
-const PLAY: Context = Context { in_pack: false };
+const PLAY: Context = Context {
+    in_pack: false,
+    game: GAME,
+};
 
 /// The browser's entry for `ruby` at `version`.
 fn entry(version: &str) -> installed::Entry {
@@ -111,7 +115,10 @@ fn updates_forward_on_the_same_game_only() {
         None,
         "a version the index no longer lists"
     );
-    let in_pack = Context { in_pack: true };
+    let in_pack = Context {
+        in_pack: true,
+        game: GAME,
+    };
     assert_eq!(to(&entry("1.0.0"), &in_pack), None, "a modpack's profile");
     let native = installed::Entry {
         file: "sunrise-native-mods/ruby.smod".into(),

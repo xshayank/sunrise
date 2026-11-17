@@ -3,7 +3,7 @@
 //! `SUNRISE_CURSEFORGE_API_KEY` in the environment, else the same variable when the launcher was
 //! built (the release workflow passes the repository secret). Files carry SHA-1 and MD5; the
 //! download is checked against the SHA-1.
-use super::{modrinth::encode, FileRef, Kind, Project, Query, Source, SourceId, Version, GAME};
+use super::{modrinth::encode, FileRef, Kind, Project, Query, Source, SourceId, Version};
 use serde_json::Value;
 
 const API: &str = "https://api.curseforge.com/v1";
@@ -83,7 +83,7 @@ pub(super) fn search_url(query: &Query) -> String {
     if let Some(v) = &query.filters.game_version {
         url.push_str(&format!("&gameVersion={}", encode(v)));
     } else if !query.everything && matches!(query.kind, Kind::ResourcePack | Kind::Mod) {
-        url.push_str(&format!("&gameVersion={GAME}"));
+        url.push_str(&format!("&gameVersion={}", query.game));
     }
     if !query.text.is_empty() {
         url.push_str("&searchFilter=");

@@ -1244,9 +1244,49 @@ fn read_json(path: &Path) -> Option<serde_json::Value> {
 }
 
 fn game_version_at(dir: &Path) -> String {
-    read_json(&dir.join("research-lock.json"))
-        .and_then(|v| v["minecraft"]["version"].as_str().map(String::from))
-        .unwrap_or_else(|| sunrise_platform::version::VANILLA_VERSION.into())
+    locked_game(dir).unwrap_or_else(|| PINNED_GAME.into())
+}
+
+fn locked_game(dir: &Path) -> Option<String> {
+    read_json(&dir.join("research-lock.json"))?["minecraft"]["version"]
+        .as_str()
+        .map(String::from)
+}
+
+/// The Minecraft version played when no installed build says (the game's `VERSION_ID`).
+pub const PINNED_GAME: &str = "26.3";
+
+/// The Minecraft version the launcher plays (`WorldVersion.id()`), for the mod browser.
+pub fn played_version_id() -> String {
+    played("version_id")
+}
+
+/// The name of the Minecraft version the launcher plays (`WorldVersion.name()`).
+pub fn played_vanilla() -> String {
+    played("vanilla")
+}
+
+fn played(field: &str) -> String {
+    // Tests share one scratch launcher folder whose installed builds other tests change.
+    if cfg!(test) {
+        return PINNED_GAME.into();
+    }
+    played_in(&versions_dir(), Settings::load().selected.as_deref(), field)
+}
+
+/// The played build's sunrise-release.json `field`, else its locked Minecraft, else [`PINNED_GAME`].
+fn played_in(versions: &Path, selected: Option<&str>, field: &str) -> String {
+    let installed = installed_in(versions);
+    let tag = selected
+        .filter(|s| installed.iter().any(|t| t == s))
+        .or(installed.first().map(String::as_str));
+    tag.map(|t| versions.join(t))
+        .and_then(|dir| {
+            read_json(&dir.join("sunrise-release.json"))
+                .and_then(|release| release[field].as_str().map(String::from))
+                .or_else(|| locked_game(&dir))
+        })
+        .unwrap_or_else(|| PINNED_GAME.into())
 }
 
 pub fn resources(tag: &str) -> PathBuf {
@@ -4385,6 +4425,53 @@ mod tests {
     use super::*;
     use std::cmp::Ordering::*;
     use std::ffi::OsStr;
+
+    #[test]
+    fn the_played_game_comes_from_the_release_file_else_the_lock_else_the_pin() {
+        let versions = tempfile::tempdir().unwrap();
+        let v = versions.path();
+        let played = |selected, field| played_in(v, selected, field);
+        assert_eq!(played(None, "version_id"), PINNED_GAME);
+        for (tag, files) in [
+            ("v0.3.1", vec![]),
+            (
+                "v0.3.2",
+                vec![("research-lock.json", r#"{"minecraft":{"version":"26.2"}}"#)],
+            ),
+            (
+                "v0.3.3",
+                vec![
+                    ("research-lock.json", r#"{"minecraft":{"version":"26.2"}}"#),
+                    (
+                        "sunrise-release.json",
+                        r#"{"version_id":"26.4-pre1","vanilla":"26.4 Pre-Release 1"}"#,
+                    ),
+                ],
+            ),
+            (
+                "v0.3.4",
+                vec![("research-lock.json", r#"{"minecraft":{"version":"26.9"}}"#)],
+            ),
+        ] {
+            fs::create_dir_all(v.join(tag)).unwrap();
+            for (name, text) in files {
+                fs::write(v.join(tag).join(name), text).unwrap();
+            }
+        }
+        assert_eq!(
+            played(None, "version_id"),
+            PINNED_GAME,
+            "only installed builds count"
+        );
+        for tag in ["v0.3.1", "v0.3.2", "v0.3.3"] {
+            fs::write(v.join(tag).join(COMPLETE), "").unwrap();
+        }
+        assert_eq!(played(None, "version_id"), "26.4-pre1");
+        assert_eq!(played(None, "vanilla"), "26.4 Pre-Release 1");
+        assert_eq!(played(Some("v0.3.2"), "vanilla"), "26.2");
+        assert_eq!(played(Some("v0.3.1"), "version_id"), PINNED_GAME);
+        assert_eq!(played(Some("v9.9.9"), "version_id"), "26.4-pre1");
+    }
 
     fn pe_architecture(bytes: &[u8]) -> Option<GameArchitecture> {
         if bytes.get(..2)? != b"MZ" {

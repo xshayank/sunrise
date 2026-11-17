@@ -1,7 +1,7 @@
 //! The machine the game runs on, as the OS describes it ([`Machine`]), read the same way on every
 //! start: the OS and its version, the CPU, memory, the drive under the game folder, power and
 //! form, plus the GPU's maker and memory ([`gpu_vendor`], [`vram_mb`]). The crash report and the
-//! renderer's GPU info read it; the platform re-exports it (`sunrise_platform::system`) for the
+//! renderer's GPU info read it; the game's platform re-exports it for the
 //! Sunrise layer (docs/layers.md#engine).
 //!
 //! Only what explains performance: no serial number, host name, user name or path is read. The

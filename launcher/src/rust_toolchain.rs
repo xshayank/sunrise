@@ -15,7 +15,7 @@ use std::process::Command;
 /// The Rust release native mods build with: the one pin CI builds the game with and wasm mods
 /// build with (`tools/ci/rust-version`; horizon-mixins needs 1.95 or newer). Bumping it also
 /// updates [`DIST`] and each platform's component checksums below.
-pub const VERSION: &str = include_str!("../../tools/ci/rust-version").trim_ascii();
+pub const VERSION: &str = include_str!("../rust-version").trim_ascii();
 const DIST: &str = "https://static.rust-lang.org/dist/2026-10-15";
 
 /// One platform's components: (name, SHA-256, compressed bytes) of `<name>-<VERSION>-<target>.tar.gz`.

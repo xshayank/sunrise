@@ -15,6 +15,7 @@ SAME_BYTES = (
     ("crates/sunrise-release-sign/tests/signed", "release-verify/tests/signed"),
     ("crates/sunrise-mod-package/tests/index", "smod/tests/index"),
     ("crates/sunrise-theme/tokens.css", "theme/tokens.css"),
+    ("tools/ci/rust-version", "../rust-version"),
     ("packaging/icons/hicolor/16x16/apps/sunrise.png", "../assets/icons/hicolor/16x16/apps/sunrise.png"),
     ("packaging/icons/hicolor/24x24/apps/sunrise.png", "../assets/icons/hicolor/24x24/apps/sunrise.png"),
     ("packaging/icons/hicolor/32x32/apps/sunrise.png", "../assets/icons/hicolor/32x32/apps/sunrise.png"),
@@ -324,6 +325,8 @@ class LauncherCopies(unittest.TestCase):
                          constant("crates/sunrise-mod-surface/src/uses.rs", "MAX_USES_BYTES"))
         self.assertEqual(constant("launcher/src/native_mods/bundle.rs", "MIXINS_REV"),
                          constant("crates/sunrise-mod-package/src/mixins_tool.rs", "REV"))
+        self.assertEqual(constant("launcher/src/backend.rs", "PINNED_GAME"),
+                         constant("crates/sunrise-core/src/version.rs", "VERSION_ID"))
 
     def test_a_drifted_copy_is_caught(self):
         self.assertEqual(code("//! Doc.\nuse a::{b,\n c};\nfn f() { g( 1 ) }\n"), "fnf(){g(1)}")

@@ -114,7 +114,7 @@ pub fn check_project(
     progress: &dyn Fn(f32),
 ) -> Result<(Version, Check), String> {
     let versions = source.versions(project)?;
-    let version = pick(Kind::Mod, &versions, everything)
+    let version = pick(Kind::Mod, &versions, everything, &super::game())
         .cloned()
         .ok_or_else(|| match versions.iter().find_map(|v| v.blocked.clone()) {
             Some(why) => format!("{} can't be downloaded from here: {why}", project.title),

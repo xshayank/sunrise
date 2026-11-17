@@ -1,5 +1,6 @@
 use super::*;
 use std::collections::BTreeMap;
+const GAME: &str = crate::backend::PINNED_GAME;
 
 fn scratch(name: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(

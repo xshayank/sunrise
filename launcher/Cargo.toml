@@ -58,7 +58,7 @@ sunrise-launcher-telemetry = { path = "crates/telemetry" }
 sunrise-launcher-theme = { path = "crates/theme" }
 # The sunset scene, painted skies, rain and frosted glass (`scenery/`).
 sunrise-launcher-scenery = { path = "scenery" }
-# The engine, through the platform's public API (docs/layers.md): the pinned version and the preparer.
+# The engine, through the platform's public API (docs/layers.md): the preparer.
 sunrise-platform = { path = "../crates/sunrise-platform", features = ["prepare"] }
 # Parses proxy and download addresses (`net.rs`); already in the lockfile through ureq.
 url = "2"

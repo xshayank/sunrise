@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::json;
 use sha2::Digest;
+const GAME: &str = crate::backend::PINNED_GAME;
 
 fn v(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| s.to_string()).collect()
@@ -33,7 +34,8 @@ fn support_by_kind() {
         support(
             Kind::ResourcePack,
             &v(&["1.21.4", GAME]),
-            &v(&["minecraft"])
+            &v(&["minecraft"]),
+            GAME
         ),
         Support::Works
     );
@@ -41,13 +43,14 @@ fn support_by_kind() {
         Kind::ResourcePack,
         &v(&["1.20.1", "1.21.10", "1.21.9", "26.4-snapshot-1"]),
         &[],
+        GAME,
     );
     assert_eq!(old.label(), "Partly");
     assert!(
         old.reason().unwrap().starts_with("Made for 1.21.10:"),
         "{old:?}"
     );
-    assert!(support(Kind::Modpack, &v(&["1.21.1"]), &v(&["neoforge"])).installable());
+    assert!(support(Kind::Modpack, &v(&["1.21.1"]), &v(&["neoforge"]), GAME).installable());
 }
 
 #[test]
@@ -58,18 +61,21 @@ fn picks_the_newest_version_that_runs() {
         version("old", &["1.21.1"], &["minecraft"]),
     ];
     assert_eq!(
-        pick(Kind::ResourcePack, &versions, false).unwrap().id,
+        pick(Kind::ResourcePack, &versions, false, GAME).unwrap().id,
         "now"
     );
     let old = [version("old", &["1.21.1"], &["minecraft"])];
-    assert!(pick(Kind::ResourcePack, &old, false).is_none());
-    assert_eq!(pick(Kind::ResourcePack, &old, true).unwrap().id, "old");
+    assert!(pick(Kind::ResourcePack, &old, false, GAME).is_none());
+    assert_eq!(
+        pick(Kind::ResourcePack, &old, true, GAME).unwrap().id,
+        "old"
+    );
 
     let mut blocked = version("blocked", &[GAME], &["minecraft"]);
     blocked.blocked = Some("no".into());
     let mut empty = version("empty", &[GAME], &["minecraft"]);
     empty.files.clear();
-    assert!(pick(Kind::ResourcePack, &[blocked, empty], true).is_none());
+    assert!(pick(Kind::ResourcePack, &[blocked, empty], true, GAME).is_none());
 }
 
 #[test]
@@ -80,17 +86,20 @@ fn data_packs_are_their_own_kind() {
         version("pack", &[GAME], &["datapack"]),
         version("old", &["1.21.4"], &["datapack"]),
     ];
-    assert_eq!(pick(Kind::DataPack, &versions, false).unwrap().id, "pack");
-    assert!(pick(Kind::DataPack, &versions[2..], false).is_none());
     assert_eq!(
-        pick(Kind::DataPack, &versions[2..], true).unwrap().id,
+        pick(Kind::DataPack, &versions, false, GAME).unwrap().id,
+        "pack"
+    );
+    assert!(pick(Kind::DataPack, &versions[2..], false, GAME).is_none());
+    assert_eq!(
+        pick(Kind::DataPack, &versions[2..], true, GAME).unwrap().id,
         "old"
     );
-    assert!(pick(Kind::DataPack, &versions[..1], true).is_none());
+    assert!(pick(Kind::DataPack, &versions[..1], true, GAME).is_none());
 
-    let now = support(Kind::DataPack, &v(&[GAME]), &v(&["datapack"]));
+    let now = support(Kind::DataPack, &v(&[GAME]), &v(&["datapack"]), GAME);
     assert_eq!(now.reason(), Some(datapack_support()));
-    let old = support(Kind::DataPack, &v(&["1.21.4"]), &v(&["datapack"]));
+    let old = support(Kind::DataPack, &v(&["1.21.4"]), &v(&["datapack"]), GAME);
     assert!(
         old.reason().unwrap().starts_with("Made for 1.21.4"),
         "{old:?}"
@@ -188,12 +197,12 @@ fn modrinth_search_asks_for_what_runs() {
 #[test]
 fn java_mods_are_checked_for_1_21_and_later() {
     assert_eq!(
-        support(Kind::Mod, &v(&["1.20.1"]), &v(&["forge"])),
+        support(Kind::Mod, &v(&["1.20.1"]), &v(&["forge"]), GAME),
         Support::No("Made for 1.20.1: Sunrise ports mods made for 1.21 and later.".into())
     );
-    assert!(!support(Kind::Mod, &v(&[GAME]), &v(&["rift"])).installable());
+    assert!(!support(Kind::Mod, &v(&[GAME]), &v(&["rift"]), GAME).installable());
     assert!(matches!(
-        support(Kind::Mod, &v(&["1.21.1"]), &v(&["neoforge"])),
+        support(Kind::Mod, &v(&["1.21.1"]), &v(&["neoforge"]), GAME),
         Support::Partial(_)
     ));
     for (version, ok) in [
@@ -212,9 +221,12 @@ fn java_mods_are_checked_for_1_21_and_later() {
         version("now", &[GAME], &["neoforge"]),
         version("older", &["1.21.1"], &["neoforge"]),
     ];
-    assert_eq!(pick(Kind::Mod, &versions, false).unwrap().id, "now");
-    assert_eq!(pick(Kind::Mod, &versions[3..], false), None);
-    assert_eq!(pick(Kind::Mod, &versions[3..], true).unwrap().id, "older");
+    assert_eq!(pick(Kind::Mod, &versions, false, GAME).unwrap().id, "now");
+    assert_eq!(pick(Kind::Mod, &versions[3..], false, GAME), None);
+    assert_eq!(
+        pick(Kind::Mod, &versions[3..], true, GAME).unwrap().id,
+        "older"
+    );
 }
 
 #[test]
@@ -230,7 +242,7 @@ fn modrinth_answers() {
     assert_eq!(p.id, "50dA9Sha");
     assert_eq!(p.kind, Kind::ResourcePack);
     assert_eq!(p.page, "https://modrinth.com/resourcepack/fresh-animations");
-    assert_eq!(p.support(), Support::Works);
+    assert_eq!(p.support(GAME), Support::Works);
     assert_eq!(p.downloads, 51404735);
     // A Java mod is a result, checked before it is offered.
     let jar = json!({"project_id": "AANobbMI", "project_type": "mod", "slug": "sodium",
@@ -238,7 +250,7 @@ fn modrinth_answers() {
     let sodium = modrinth::parse_hit(&jar).unwrap();
     assert_eq!(sodium.kind, Kind::Mod);
     assert_eq!(sodium.page, "https://modrinth.com/mod/sodium");
-    assert!(matches!(sodium.support(), Support::Partial(_)));
+    assert!(matches!(sodium.support(GAME), Support::Partial(_)));
     // Data packs, plugins and shader packs are not.
     for project_type in ["plugin", "shader"] {
         let hit = json!({"project_id": "x", "project_type": project_type, "slug": "p"});
@@ -255,7 +267,7 @@ fn modrinth_answers() {
     assert_eq!(p.kind, Kind::ResourcePack);
     assert_eq!(p.license, "LicenseRef-Custom");
     assert_eq!(p.page, "https://modrinth.com/resourcepack/fresh-animations");
-    assert!(p.support().installable());
+    assert!(p.support(GAME).installable());
 
     let version = json!({
         "id": "tvGVYMD4", "version_number": "1.11.1", "date_published": "2026-10-20T02:23:13Z",
@@ -320,7 +332,7 @@ fn curseforge_answers() {
     assert_eq!(p.game_versions, ["1.21.1"]);
     assert_eq!(p.loaders, ["neoforge"]);
     assert_eq!(p.author, "mezz");
-    assert!(p.support().installable());
+    assert!(p.support(GAME).installable());
     // Shader packs (class 6552) are not offered.
     assert!(curseforge::parse_mod(&json!({"id": 1, "classId": 6552})).is_none());
     assert_eq!(
@@ -438,15 +450,15 @@ fn live_modrinth_search_pick_and_download() {
         assert!(!found.is_empty(), "{kind:?}");
         assert!(found
             .iter()
-            .all(|p| p.kind == kind && p.support().installable()));
+            .all(|p| p.kind == kind && p.support(GAME).installable()));
     }
     let packs = source
         .search(&Query::new("fresh animations", Kind::ResourcePack))
         .unwrap();
     let p = packs.iter().find(|p| p.slug == "fresh-animations").unwrap();
-    assert_eq!(p.support(), Support::Works);
+    assert_eq!(p.support(GAME), Support::Works);
     let versions = source.versions(p).unwrap();
-    let chosen = pick(p.kind, &versions, false).unwrap();
+    let chosen = pick(p.kind, &versions, false, GAME).unwrap();
     assert!(chosen.game_versions.iter().any(|g| g == GAME));
     let dir = scratch("live");
     let path = download::fetch(chosen.file().unwrap(), &dir, &|_| {}).unwrap();

@@ -74,6 +74,8 @@ pub(super) struct Mods {
     focus: FocusHandle,
     pub(super) focused: bool,
     everything: bool,
+    /// The Minecraft version Sunrise plays, read again with each search ([`browser::game`]).
+    pub(super) game: String,
     /// Which search is the current one; answers for older ones are dropped.
     search: u64,
     searching: bool,
@@ -198,6 +200,7 @@ impl Mods {
             focus: cx.focus_handle().tab_index(0).tab_stop(true),
             focused: false,
             everything: false,
+            game: browser::game(),
             search: 0,
             searching: false,
             searched: false,
@@ -262,7 +265,7 @@ impl Mods {
                 self.checks.get(&(p.source, p.id.clone())),
                 None | Some(Checking::Running)
             )
-            && p.support().installable()
+            && p.support(&self.game).installable()
     }
 
     /// How well a result runs: a Java mod's from its check once it has one. In a Java
@@ -271,7 +274,7 @@ impl Mods {
         if self.java_for(p.kind).is_some() {
             return Support::Works;
         }
-        let metadata = p.support();
+        let metadata = p.support(&self.game);
         if p.kind != PackKind::Mod || p.source == SourceId::Sunrise || !metadata.installable() {
             return metadata;
         }
@@ -534,6 +537,7 @@ impl Launcher {
                 ..Query::new(m.text.text(), m.kind)
             },
         };
+        m.game = query.game.clone();
         // A Java instance's files are Modrinth's; Sunrise's registry is for Sunrise.
         let source = match m.java_for(m.kind) {
             Some(_) => SourceId::Modrinth,
@@ -550,7 +554,11 @@ impl Launcher {
                     found
                         .iter()
                         .map(|p| {
-                            let lines = sunrise::trust_and_capabilities(&p.id, Some(&instance));
+                            let lines = sunrise::trust_and_capabilities(
+                                &p.id,
+                                Some(&instance),
+                                &query.game,
+                            );
                             (p.id.clone(), lines)
                         })
                         .collect()
@@ -666,7 +674,7 @@ impl Launcher {
         let todo: Vec<Project> = found
             .into_iter()
             .filter(|p| p.kind == PackKind::Mod && p.source != SourceId::Sunrise)
-            .filter(|p| p.support().installable())
+            .filter(|p| p.support(&m.game).installable())
             .filter(|p| !m.checks.contains_key(&(p.source, p.id.clone())))
             .collect();
         if todo.is_empty() {
@@ -676,7 +684,7 @@ impl Launcher {
             m.checks.insert((p.source, p.id.clone()), Checking::Running);
         }
         // A version other than 26.3 asked for: check the newest file for 1.21 and later.
-        let everything = m.everything || m.browse.filters.other_version();
+        let everything = m.everything || m.browse.filters.other_version(&m.game);
         let tx = m.tx.clone();
         let queue = std::sync::Mutex::new(todo.into_iter());
         std::thread::spawn(move || {
@@ -828,7 +836,8 @@ impl Launcher {
         self.mods.message = None;
         self.mods.busy = Some((id.clone(), format!("Asking {}…", source.label()), 0.));
         self.mods.updates.remove(&(source, id.clone()));
-        let everything = self.mods.everything || self.mods.browse.filters.other_version();
+        let everything =
+            self.mods.everything || self.mods.browse.filters.other_version(&self.mods.game);
         // A modpack is ported for the selected version as soon as it is imported.
         let tag = self.selected().map(|tag| tag.to_string());
         let tx = self.mods.tx.clone();
@@ -1836,6 +1845,7 @@ pub(super) struct AutoTarget {
 /// profile, whose pack pins its mods. Returns what happened for the page's notice.
 pub(super) fn auto_update(targets: &[AutoTarget], enabled: bool) -> Vec<String> {
     let mut lines = Vec::new();
+    let game = browser::game();
     for t in targets {
         let i = &t.instance;
         let pack = i.id.starts_with("pack:") || i.id.starts_with("port:");
@@ -1844,6 +1854,7 @@ pub(super) fn auto_update(targets: &[AutoTarget], enabled: bool) -> Vec<String> 
         };
         let ctx = sunrise::auto::Context {
             in_pack: sunrise::auto::in_pack(&i.home),
+            game: &game,
         };
         if let Some(report) = sunrise::auto::run(&i.home, &ctx, enabled, &|_, _| {}) {
             lines.extend(report.lines());

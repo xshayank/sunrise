@@ -1,9 +1,10 @@
 use super::*;
-use crate::browser::{download, FileRef, Query, GAME};
+use crate::browser::{download, FileRef, Query};
 use crate::porter::Check;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::sync::Mutex;
+const GAME: &str = crate::backend::PINNED_GAME;
 
 /// A source in memory: projects, their versions, and the bytes each file URL serves.
 #[derive(Default)]

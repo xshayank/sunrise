@@ -20,9 +20,10 @@ pub use sunrise_launcher_smod::install_lock::{lock_home, try_lock_home, HomeLock
 
 use serde::{Deserialize, Serialize};
 
-/// The Minecraft version Sunrise plays: the pinned version, so a port's regenerated
-/// `crates/sunrise-core/src/version.rs` moves it with everything else (docs/version-ports.md).
-pub const GAME: &str = sunrise_platform::version::VERSION_ID;
+/// The Minecraft version Sunrise plays: the installed build's, read once per search or install.
+pub fn game() -> String {
+    crate::backend::played_version_id()
+}
 
 /// What a project is, as far as Sunrise is concerned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -155,10 +156,10 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn support(&self) -> Support {
+    pub fn support(&self, game: &str) -> Support {
         match &self.blocked {
             Some(why) => Support::No(why.clone()),
-            None => support(self.kind, &self.game_versions, &self.loaders),
+            None => support(self.kind, &self.game_versions, &self.loaders, game),
         }
     }
 
@@ -232,9 +233,11 @@ impl Version {
 pub struct Query {
     pub text: String,
     pub kind: Kind,
-    /// Off: only what runs (made for [`GAME`]). On: everything of the kind, each result marked
+    /// Off: only what runs (made for `game`). On: everything of the kind, each result marked
     /// with how well it runs.
     pub everything: bool,
+    /// The Minecraft version Sunrise plays ([`game`]).
+    pub game: String,
     pub offset: usize,
     pub limit: usize,
     pub filters: details::Filters,
@@ -246,6 +249,7 @@ impl Query {
             text: text.trim().to_owned(),
             kind,
             everything: false,
+            game: game(),
             offset: 0,
             limit: 20,
             filters: details::Filters::default(),
@@ -300,12 +304,12 @@ pub fn source(id: SourceId) -> Option<Box<dyn Source>> {
     sources().into_iter().find(|s| s.id() == id)
 }
 
-/// How well a project of `kind` made for `game_versions` and `loaders` runs in Sunrise.
-pub fn support(kind: Kind, game_versions: &[String], loaders: &[String]) -> Support {
+/// How well a project of `kind` made for `game_versions` and `loaders` runs in Sunrise on `game`.
+pub fn support(kind: Kind, game_versions: &[String], loaders: &[String], game: &str) -> Support {
     if loaders.iter().any(|l| l == sunrise::LOADER) {
         // Made for Sunrise and reviewed: it runs when it is for the version Sunrise plays.
         return match newest_release(game_versions)
-            .filter(|_| !game_versions.iter().any(|v| v == GAME))
+            .filter(|_| !game_versions.iter().any(|v| v == game))
         {
             Some(other) => Support::No(format!("Made for Sunrise on {other}.")),
             None => Support::Works,
@@ -313,7 +317,7 @@ pub fn support(kind: Kind, game_versions: &[String], loaders: &[String]) -> Supp
     }
     match kind {
         Kind::ResourcePack => {
-            if game_versions.iter().any(|v| v == GAME) {
+            if game_versions.iter().any(|v| v == game) {
                 Support::Works
             } else if let Some(newest) = newest_release(game_versions) {
                 Support::Partial(format!(
@@ -330,7 +334,7 @@ pub fn support(kind: Kind, game_versions: &[String], loaders: &[String]) -> Supp
         Kind::Shader => Support::No("Not one of Sunrise's own shader packs.".into()),
         Kind::DataPack => {
             let made_for = match newest_release(game_versions) {
-                _ if game_versions.iter().any(|v| v == GAME) => String::new(),
+                _ if game_versions.iter().any(|v| v == game) => String::new(),
                 Some(newest) => format!("Made for {newest}: the game may refuse it. "),
                 None => "Lists no Minecraft version. ".into(),
             };
@@ -390,7 +394,12 @@ fn newest_release(versions: &[String]) -> Option<&str> {
 
 /// The version to install: the newest one that runs, or with `everything` the newest at all.
 /// `versions` is newest first, as [`Source::versions`] gives them.
-pub fn pick(kind: Kind, versions: &[Version], everything: bool) -> Option<&Version> {
+pub fn pick<'a>(
+    kind: Kind,
+    versions: &'a [Version],
+    everything: bool,
+    game: &str,
+) -> Option<&'a Version> {
     let mut usable = versions
         .iter()
         .filter(|v| v.blocked.is_none() && v.file().is_some());
@@ -398,7 +407,7 @@ pub fn pick(kind: Kind, versions: &[Version], everything: bool) -> Option<&Versi
         .iter()
         .any(|v| v.loaders.iter().any(|l| l == sunrise::LOADER))
     {
-        return usable.find(|v| v.game_versions.iter().any(|g| g == GAME));
+        return usable.find(|v| v.game_versions.iter().any(|g| g == game));
     }
     if kind == Kind::Mod {
         let java = |v: &&Version| {
@@ -406,7 +415,7 @@ pub fn pick(kind: Kind, versions: &[Version], everything: bool) -> Option<&Versi
                 .iter()
                 .any(|l| java::LOADERS.contains(&l.as_str()))
         };
-        let made_for = |v: &&Version| v.game_versions.iter().any(|g| g == GAME);
+        let made_for = |v: &&Version| v.game_versions.iter().any(|g| g == game);
         let ported = |v: &&Version| v.game_versions.iter().any(|g| portable_version(g));
         return usable
             .clone()
@@ -417,13 +426,13 @@ pub fn pick(kind: Kind, versions: &[Version], everything: bool) -> Option<&Versi
     if kind == Kind::DataPack {
         // Most data packs on Modrinth ship a mod build too: only the data pack files.
         let mut packs = usable.filter(|v| v.loaders.iter().any(|l| l == "datapack"));
-        let made_for = |v: &&Version| v.game_versions.iter().any(|g| g == GAME);
+        let made_for = |v: &&Version| v.game_versions.iter().any(|g| g == game);
         return packs
             .clone()
             .find(made_for)
             .or_else(|| packs.find(|_| everything));
     }
-    let runs = |v: &&Version| match support(kind, &v.game_versions, &v.loaders) {
+    let runs = |v: &&Version| match support(kind, &v.game_versions, &v.loaders, game) {
         Support::Works => true,
         // A modpack's version is for its own Minecraft.
         Support::Partial(_) => kind != Kind::ResourcePack,
@@ -432,7 +441,7 @@ pub fn pick(kind: Kind, versions: &[Version], everything: bool) -> Option<&Versi
     if let Some(v) = usable.clone().find(runs) {
         return Some(v);
     }
-    usable.find(|v| everything && support(kind, &v.game_versions, &v.loaders).installable())
+    usable.find(|v| everything && support(kind, &v.game_versions, &v.loaders, game).installable())
 }
 
 /// A file name from a source, kept only when it is one plain name: no folders, no `..`, no

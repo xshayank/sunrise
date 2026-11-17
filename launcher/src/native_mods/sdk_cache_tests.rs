@@ -40,7 +40,7 @@ fn index_of(files: &[(&str, &[u8])], rust: &str) -> Index {
         schema: sdk::SCHEMA,
         build: Build {
             commit: COMMIT.into(),
-            game: crate::browser::GAME.into(),
+            game: crate::backend::PINNED_GAME.into(),
             date: "2026-11-13".into(),
             nightly: Some("nightly-2026-11-13".into()),
         },

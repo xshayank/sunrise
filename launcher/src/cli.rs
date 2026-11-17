@@ -2370,12 +2370,12 @@ fn mods(action: ModsCmd, as_json: bool) -> Result<(), String> {
             let datapack = kind == Kind::DataPack;
             if as_json {
                 json(found.iter().map(|p| {
-                    let support = p.support();
+                    let support = p.support(&query.game);
                     serde_json::json!({
                         "id": p.id, "slug": p.slug, "title": p.title, "summary": p.summary,
                         "author": p.author, "downloads": p.downloads, "page": p.page,
                         "license": p.license, "support": support.label(), "reason": support.reason(),
-                        "about": if p.source == SourceId::Sunrise { sunrise::trust_and_capabilities(&p.id, instance.as_ref()) } else { Vec::new() },
+                        "about": if p.source == SourceId::Sunrise { sunrise::trust_and_capabilities(&p.id, instance.as_ref(), &query.game) } else { Vec::new() },
                     })
                 }).collect());
             } else {
@@ -2383,10 +2383,12 @@ fn mods(action: ModsCmd, as_json: bool) -> Result<(), String> {
                     println!("{}\n", sunrise_launcher::browser::datapack_support());
                 }
                 for p in &found {
-                    let support = p.support();
+                    let support = p.support(&query.game);
                     if p.source == SourceId::Sunrise {
                         println!("{}  ({})  {}\n  {}", p.title, p.slug, p.author, p.summary);
-                        for line in sunrise::trust_and_capabilities(&p.id, instance.as_ref()) {
+                        for line in
+                            sunrise::trust_and_capabilities(&p.id, instance.as_ref(), &query.game)
+                        {
                             println!("  {line}");
                         }
                         continue;

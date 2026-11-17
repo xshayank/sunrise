@@ -1,6 +1,7 @@
 //! The registry source against the sample index of `sunrise_launcher_smod::index`
 //! (`crates/smod/tests/index/`), its files served from disk.
 use super::*;
+const GAME: &str = crate::backend::PINNED_GAME;
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/smod/tests/index")
@@ -30,7 +31,7 @@ pub(super) fn scratch(name: &str) -> PathBuf {
 }
 
 fn hud(index: &Index) -> Project {
-    project_of(index, index.project("coords_hud").unwrap()).unwrap()
+    project_of(index, index.project("coords_hud").unwrap(), GAME).unwrap()
 }
 
 /// Installs the sample's checked content mod, as a modpack does.
@@ -146,7 +147,7 @@ fn searches_by_kind_and_words() {
         ["zoom", "coords_hud"]
     );
     let p = hud(&index);
-    assert_eq!(p.support(), super::super::Support::Works);
+    assert_eq!(p.support(GAME), super::super::Support::Works);
     assert_eq!(p.page, "https://playsunrise.net/mods/coords_hud");
 }
 
@@ -360,7 +361,7 @@ fn data_pack(index: &mut Index, dir: &Path) -> Project {
         versions: vec![version],
         ..base
     });
-    project_of(index, index.project("lanterns").unwrap()).unwrap()
+    project_of(index, index.project("lanterns").unwrap(), GAME).unwrap()
 }
 
 #[test]
@@ -369,7 +370,7 @@ fn a_registry_data_pack_is_checked_then_goes_into_a_world() {
     let mut index = sample();
     let p = data_pack(&mut index, &dir);
     assert_eq!(p.kind, Kind::DataPack);
-    assert_eq!(p.support(), super::super::Support::Works);
+    assert_eq!(p.support(GAME), super::super::Support::Works);
     let found: Vec<String> = search(&index, &Query::new("", Kind::DataPack))
         .into_iter()
         .map(|p| p.id)
@@ -543,8 +544,8 @@ fn executable_content_is_refused_without_installing_or_skipping_code() {
 fn installs_a_shader_pack_into_shaderpacks() {
     let index = sample();
     let home = scratch("shader");
-    let p = project_of(&index, index.project("glow").unwrap()).unwrap();
-    assert_eq!(p.support(), super::super::Support::Works);
+    let p = project_of(&index, index.project("glow").unwrap(), GAME).unwrap();
+    assert_eq!(p.support(GAME), super::super::Support::Works);
     let done = install_from(&index, true, &p, &home, &|_, _| {}).unwrap();
     assert_eq!(done[0].file, "shaderpacks/glow-1.0.0.sshader");
     assert_eq!(done[0].kind, Kind::Shader);
@@ -610,8 +611,8 @@ fn registry_versions_run_when_made_for_this_game() {
     use super::super::{pick, support, Support};
     let v = |game: &str| vec![game.to_owned()];
     let sunrise = vec![LOADER.to_owned()];
-    assert_eq!(support(Kind::Mod, &v(GAME), &sunrise), Support::Works);
-    assert!(!support(Kind::Mod, &v("26.2"), &sunrise).installable());
+    assert_eq!(support(Kind::Mod, &v(GAME), &sunrise, GAME), Support::Works);
+    assert!(!support(Kind::Mod, &v("26.2"), &sunrise, GAME).installable());
     let index = sample();
     let versions = |id: &str| -> Vec<Version> {
         let p = index.project(id).unwrap();
@@ -621,14 +622,14 @@ fn registry_versions_run_when_made_for_this_game() {
             .collect()
     };
     assert_eq!(
-        pick(Kind::Modpack, &versions("cozy"), false)
+        pick(Kind::Modpack, &versions("cozy"), false, GAME)
             .unwrap()
             .number,
         "1.0.0"
     );
     let hud = versions("coords_hud");
     assert!(hud[0].blocked.is_none());
-    assert_eq!(pick(Kind::Mod, &hud, false).unwrap().number, "0.1.0");
+    assert_eq!(pick(Kind::Mod, &hud, false, GAME).unwrap().number, "0.1.0");
 }
 
 #[test]
@@ -641,9 +642,13 @@ fn a_project_made_for_the_earlier_mod_system_says_it_cant_be_installed() {
         .unwrap();
     hud.versions[0].game = GAME.into();
     hud.versions[0].capabilities = vec!["game-read".to_string()].into();
-    let p = project_of(&index, index.project("coords_hud").unwrap()).unwrap();
-    assert!(!p.support().installable());
-    assert!(p.support().reason().unwrap().contains("earlier mod system"));
+    let p = project_of(&index, index.project("coords_hud").unwrap(), GAME).unwrap();
+    assert!(!p.support(GAME).installable());
+    assert!(p
+        .support(GAME)
+        .reason()
+        .unwrap()
+        .contains("earlier mod system"));
     // Beside a mod that installs, with fewer downloads:
     let mut other = index.project("coords_hud").unwrap().clone();
     other.id = "lanterns_plus".into();
@@ -675,7 +680,7 @@ fn a_project_made_for_the_earlier_mod_system_says_it_cant_be_installed() {
         .unwrap()
         .versions[0]
         .game = GAME.into();
-    let p = project_of(&fine, fine.project("coords_hud").unwrap()).unwrap();
+    let p = project_of(&fine, fine.project("coords_hud").unwrap(), GAME).unwrap();
     assert!(p.blocked.is_none());
 }
 

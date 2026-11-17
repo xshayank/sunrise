@@ -103,7 +103,7 @@ pub fn launcher_entry(exe: &Path) -> String {
          StartupWMClass=sunrise-launcher\n",
         quote(exe),
         exe.display(),
-        minecraft = sunrise_platform::version::VANILLA_VERSION,
+        minecraft = crate::backend::played_vanilla(),
     );
     if cfg!(sunrise_fork_launcher) {
         entry
