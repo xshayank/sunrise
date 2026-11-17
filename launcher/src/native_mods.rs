@@ -11,8 +11,8 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use sunrise_mod_package::dependencies;
+use sunrise_native_build::package;
 pub use sunrise_native_build::Refusal;
-use sunrise_native_build::{api, package, prebuilt};
 use sunrise_native_build::{bundle_files, is_revision, registry_rustc};
 pub use sunrise_native_build::{
     bundle_in, bundles, check_cancelled, copy_bundle, digest, failure, scan_bundles, source_digest,
@@ -1092,15 +1092,23 @@ pub struct AtStake {
     pub base: String,
 }
 
-/// Each project's fit to `sdk`'s build, by mod id, in `projects`' order, as the SDK's tool says (`native-check` on `folder`); the surface and build data are fetched only when a mod made for another build needs them.
-fn judge_all(
+/// What the SDK's tool said of a set of mods: each one's verdict or refusal, by id, and the route the usable ones take.
+#[derive(Default)]
+struct Checks {
+    verdicts: Vec<(String, fit::Verdict)>,
+    refusals: Vec<(String, String)>,
+    route: Option<String>,
+}
+
+/// The mods `ids` of `folder` checked against `sdk`'s build by its tool (`native-check`); the surface and build data are fetched only when a mod made for another build needs them.
+fn check_all(
     folder: &Path,
-    projects: &[api::Project<'_>],
+    ids: &[&str],
     sdk: &sdk_cache::Sdk,
     base: &sdk_cache::Base,
-) -> Result<Vec<(String, fit::Verdict)>, sdk_cache::Refusal> {
-    if projects.is_empty() {
-        return Ok(Vec::new());
+) -> Result<Checks, sdk_cache::Refusal> {
+    if ids.is_empty() {
+        return Ok(Checks::default());
     }
     let refused = |why: String| sdk_cache::Refusal::Refused {
         build: sdk.shown(),
@@ -1124,14 +1132,21 @@ fn judge_all(
             break checked;
         }
     };
-    Ok(projects
-        .iter()
-        .filter_map(|project| {
-            let id = &project.bundle.manifest.id;
-            let verdict = checked.mods.iter().find(|m| &m.id == id)?.verdict.clone()?;
-            Some((id.clone(), verdict))
-        })
-        .collect())
+    let mut checks = Checks {
+        route: checked.route,
+        ..Checks::default()
+    };
+    for id in ids {
+        let Some(found) = checked.mods.iter().find(|m| m.id == *id) else {
+            continue;
+        };
+        if let Some(refusal) = &found.refusal {
+            checks.refusals.push((id.to_string(), refusal.clone()));
+        } else if let Some(verdict) = &found.verdict {
+            checks.verdicts.push((id.to_string(), verdict.clone()));
+        }
+    }
+    Ok(checks)
 }
 
 /// A build's refusal of the mod tools, as the player reads it. A refused signature is short on
@@ -1351,11 +1366,7 @@ fn pipeline(
     let resolution = dependencies::resolve_links(&inputs)
         .map_err(|error| format!("code link requirements refused: {error}"))?;
     let ordered: Vec<Bundle> = resolution.order.iter().map(|&i| mods[i].clone()).collect();
-    let projects: Vec<_> = mods
-        .iter()
-        .map(api::Project::read)
-        .collect::<Result<_, _>>()
-        .map_err(|error| error.to_string())?;
+    let ids: Vec<&str> = mods.iter().map(|b| b.manifest.id.as_str()).collect();
     for bundle in &ordered {
         if !bundle.manifest.internals.is_empty() {
             let paths = bundle
@@ -1390,12 +1401,16 @@ fn pipeline(
         Some(sdk_cache::index(&sdk_base, &revision, &keys).map_err(refused)?)
     };
     let mut fitted: Vec<String> = Vec::new();
+    let mut route = None;
     if let Some(sdk) = &sdk {
-        progress(Step::Checking(projects.len()));
-        let verdicts =
-            judge_all(&incoming, &projects, sdk, &sdk_base).map_err(|r| r.to_string())?;
+        progress(Step::Checking(ids.len()));
+        let checks = check_all(&incoming, &ids, sdk, &sdk_base).map_err(|r| r.to_string())?;
+        if let Some((_, refusal)) = checks.refusals.first() {
+            return Err(refusal.clone().into());
+        }
+        route = checks.route;
         let mut unusable = Vec::new();
-        for (id, verdict) in verdicts {
+        for (id, verdict) in checks.verdicts {
             match verdict {
                 fit::Verdict::MadeFor => {}
                 fit::Verdict::Fits { .. } => fitted.push(id),
@@ -1522,9 +1537,6 @@ fn pipeline(
         &requested,
     )?;
     let exists = target.directory(&version).join(".installed").is_file();
-    if let Some(reason) = prebuilt::refusal(&projects) {
-        return Err(reason.to_string().into());
-    }
     // The steps around the mods' compile, timed like each command (`run_checked`), so the log
     // accounts for the whole build.
     let timed = |step: &str, since: std::time::Instant| {
@@ -1586,15 +1598,16 @@ fn pipeline(
                     })
                 };
                 let program = sdk_cache::tool(sdk, &sdk_base, &fetched).map_err(refused)?;
-                let slices = sdk_cache::slices(
-                    lease,
-                    sdk,
-                    &sdk_base,
-                    prebuilt::Route::of(&projects),
-                    target,
-                    &fetched,
-                )
-                .map_err(refused)?;
+                // A developer base using its commit's SDK release asks its route here: no fit was checked.
+                let route = match route.clone() {
+                    Some(route) => route,
+                    None => check_all(&incoming, &ids, sdk, &sdk_base)
+                        .map_err(refused)?
+                        .route
+                        .unwrap_or_default(),
+                };
+                let slices = sdk_cache::slices(lease, sdk, &sdk_base, &route, target, &fetched)
+                    .map_err(refused)?;
                 (slices, program)
             }
         };
@@ -1670,8 +1683,8 @@ fn pipeline(
         // The tool compiles every mod in the folder it's given: exactly the staged copies of the ones this build keeps.
         let compiled = root().join("mods.compile");
         let _ = fs::remove_dir_all(&compiled);
-        for project in &projects {
-            copy_bundle(project.bundle, &compiled.join(&project.bundle.manifest.id))?;
+        for bundle in &mods {
+            copy_bundle(bundle, &compiled.join(&bundle.manifest.id))?;
         }
         let consent = |asked: &tool::Consent| {
             options.registry_consent.is_some_and(|ask| {
@@ -3366,11 +3379,11 @@ mod tests {
         let sentinel = preview.join("snapshot-sentinel");
         fs::write(&sentinel, b"retained").unwrap();
         let lease = crate::native_cache::Cache::acquire(&backend::build_dir()).unwrap();
-        let plan = planning::classify(&folder, None, &lease).unwrap();
-        assert_eq!(plan.mods.len(), 1);
-        assert_eq!(plan.mods[0].0, "snapshot");
+        // Its refusal is the SDK tool's to say (`native-check`); without an installed base none is asked.
+        let refused = planning::classify(&folder, None, &lease).err().unwrap();
         assert!(
-            matches!(&plan.mods[0].1, Route::Invalid { reason } if reason.contains("E_GAME_DEPENDENCY"))
+            refused.to_string().contains("Install Sunrise first"),
+            "{refused}"
         );
         assert_eq!(fs::read(&sentinel).unwrap(), b"retained");
         fs::remove_file(sentinel).unwrap();

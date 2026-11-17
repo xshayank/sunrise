@@ -27,7 +27,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use sunrise_launcher_release_verify::{PublicKey, SIGNATURE, SIGNATURE_V2, SUMS};
 use sunrise_launcher_sdk::{self as sdk, Asset, Index, Kind, Side, INDEX};
-use sunrise_native_build::prebuilt::{Package, Route};
+use sunrise_native_build::prebuilt::Package;
 
 /// Replaces the base SDK releases are read from: a URL, or a folder holding `sdk-<build id>/`
 /// folders (and game releases' folders, for their build ids).
@@ -528,7 +528,7 @@ pub(super) fn slices(
     _lease: &crate::native_cache::Cache,
     sdk: &Sdk,
     base: &Base,
-    route: Route,
+    route: &str,
     target: Target,
     progress: &dyn Fn(Fetched),
 ) -> Result<Package, Refusal> {
@@ -539,6 +539,15 @@ pub(super) fn slices(
     crate::storage::mark_used(&prebuilt.join(unit(sdk.commit(), host.target, side)))
         .map_err(|error| Refusal::Cache(super::cache_error(error)))?;
     Ok(package)
+}
+
+/// The SDK route (`api`, `engine`) a build route the tool names (`prebuilt-api`, `prebuilt`) fetches.
+fn route_inputs(route: &str) -> Option<&'static str> {
+    match route {
+        "prebuilt-api" => Some("api"),
+        "prebuilt" => Some("engine"),
+        _ => None,
+    }
 }
 
 /// The SDK's native build tool for this computer (its `tool` route), fetched beside the slices and kept: the program to run.
@@ -652,7 +661,7 @@ fn slices_in(
     prebuilt: &Path,
     sdk: &Sdk,
     base: &Base,
-    route: Route,
+    route: &str,
     triple: &str,
     side: Side,
     progress: &dyn Fn(Fetched),
@@ -664,7 +673,7 @@ fn slices_in(
     };
     let names = sdk
         .index
-        .route_assets(route.inputs(), triple, side)
+        .route_assets(route_inputs(route).ok_or_else(|| refused(trf("its tool names the route {route}, which this launcher doesn't know: update the launcher", &[("route", route)])))?, triple, side)
         .map_err(|r| match r {
             sdk::Refusal::Missing(_) => Refusal::Host,
             other => refused(other.to_string()),

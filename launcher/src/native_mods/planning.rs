@@ -18,29 +18,20 @@ pub(super) fn classify(
     // Held while the SDK's index, surface and build data are read and kept.
     _lease: &crate::native_cache::Cache,
 ) -> Result<Routes, Failed> {
-    let found = scan_bundles(folder)?;
+    let found: Vec<Bundle> = scan_bundles(folder)?
+        .into_iter()
+        .filter(|bundle| bundle.manifest.native.is_some())
+        .collect();
     let mut result = Routes::default();
-    let mut projects = Vec::new();
     for bundle in &found {
-        let route = match api::Project::read(bundle) {
-            Ok(project) => {
-                let route = prebuilt::project_refusal(&project).map_or(Route::Prebuilt, |reason| {
-                    Route::Invalid {
-                        reason: reason.plain(),
-                    }
-                });
-                projects.push(project);
-                route
-            }
-            Err(error) => Route::Invalid {
-                reason: error.to_string(),
-            },
-        };
-        result.mods.push((bundle.manifest.id.clone(), route));
+        result
+            .mods
+            .push((bundle.manifest.id.clone(), Route::Prebuilt));
     }
-    if projects.is_empty() {
+    if found.is_empty() {
         return Ok(result);
     }
+    let ids: Vec<&str> = found.iter().map(|b| b.manifest.id.as_str()).collect();
     let base = base.ok_or_else(|| tr("Install Sunrise first.").to_string())?;
     let built_on = checked_about(base)?;
     let origin = built_on.as_ref().map_or(base, |about| about.base.as_str());
@@ -72,9 +63,12 @@ pub(super) fn classify(
             *slot = route;
         }
     };
-    match judge_all(folder, &projects, &sdk, &sdk_base) {
-        Ok(verdicts) => {
-            for (id, verdict) in verdicts {
+    match check_all(folder, &ids, &sdk, &sdk_base) {
+        Ok(checks) => {
+            for (id, reason) in checks.refusals {
+                said(id.as_str(), Route::Invalid { reason });
+            }
+            for (id, verdict) in checks.verdicts {
                 let route = match &verdict {
                     fit::Verdict::MadeFor => continue,
                     fit::Verdict::Fits { .. } => Route::Fits {
@@ -91,9 +85,9 @@ pub(super) fn classify(
         }
         // Nothing is guessed: without the build's files, no mod made for another build "fits".
         Err(refusal) => {
-            for project in &projects {
-                let id = &project.bundle.manifest.id;
-                if project.bundle.native().sunrise != revision {
+            for bundle in &found {
+                let id = &bundle.manifest.id;
+                if bundle.native().sunrise != revision {
                     said(
                         id.as_str(),
                         Route::Invalid {
@@ -141,16 +135,17 @@ pub fn update_check(home: &Path, to: &str) -> Result<UpdateCheck, Failed> {
         .into_iter()
         .filter(|bundle| bundle.manifest.native.is_some())
         .collect();
-    let projects: Vec<_> = found
-        .iter()
-        .filter_map(|bundle| api::Project::read(bundle).ok())
-        .collect();
+    let ids: Vec<&str> = found.iter().map(|b| b.manifest.id.as_str()).collect();
     let revision = build_revision(to, None)?;
     let sdk_base = sdk_cache::Base::from_env();
     let keys = sunrise_launcher_release_verify::sdk_keys_for(backend::REPO);
     let sdk = sdk_cache::index(&sdk_base, &revision, &keys).map_err(|r| r.to_string())?;
     let verdicts = match &folder {
-        Some(folder) => judge_all(folder, &projects, &sdk, &sdk_base).map_err(|r| r.to_string())?,
+        Some(folder) => {
+            check_all(folder, &ids, &sdk, &sdk_base)
+                .map_err(|r| r.to_string())?
+                .verdicts
+        }
         None => Vec::new(),
     };
     let shown = sdk.shown();

@@ -340,12 +340,16 @@ pub(super) fn stop() {
 /// `native-check`'s reply: each mod's refusal, verdict or the file it needs.
 #[derive(Debug, Deserialize)]
 pub(super) struct Checked {
+    #[serde(default)]
+    pub route: Option<String>,
     pub mods: Vec<CheckedMod>,
 }
 
 #[derive(Debug, Deserialize)]
 pub(super) struct CheckedMod {
     pub id: String,
+    #[serde(default)]
+    pub refusal: Option<String>,
     #[serde(default)]
     pub verdict: Option<super::fit::Verdict>,
     #[serde(default)]
